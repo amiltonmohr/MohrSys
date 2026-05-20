@@ -25,7 +25,7 @@ const FORMATOS_PADRAO = [
 ];
 
 interface FormatoResult {
-  nome: string; w: number; h: number;
+  nome: string; w: number; h: number; div: string;
   enc: number; colunas: number; orientacao: string;
   custoPorPeca: number; pecasPorFolha66x96: number;
   aproveitamento: number;

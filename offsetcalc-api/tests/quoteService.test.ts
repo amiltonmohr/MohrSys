@@ -71,9 +71,10 @@ describe('QuoteService.calculateQuote', () => {
   });
 
   test('tira/retira uses max(front, back) plates for symmetric color count', () => {
-    const input = { ...baseInput, colors_front: 4, colors_back: 4 };
+    // 10×8cm results in Formato 4 with even columns (4 pieces, normal orientation)
+    const input = { ...baseInput, width_cm: 10, height_cm: 8, colors_front: 4, colors_back: 4 };
     const result = calculateQuote(input, mockConfig);
-    // With tira/retira: chapas = max(4,4) = 4
+    // With tira/retira enabled: chapas = max(4,4) = 4
     expect(result.num_chapas).toBe(4);
     expect(result.tira_retira).toBe(true);
   });
