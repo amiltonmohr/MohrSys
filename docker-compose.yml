@@ -1,0 +1,82 @@
+version: '3.9'
+
+services:
+  # ── PostgreSQL ──────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: offsetcalc
+      POSTGRES_PASSWORD: offsetcalc123
+      POSTGRES_DB: offsetcalc
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./offsetcalc-api/src/db/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U offsetcalc"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ── Redis ───────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ── API ─────────────────────────────────────────────────────
+  api:
+    build:
+      context: ./offsetcalc-api
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://offsetcalc:offsetcalc123@postgres:5432/offsetcalc
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: dev-jwt-secret-key-minimum-32-characters
+      JWT_EXPIRY: 900
+      REFRESH_TOKEN_SECRET: dev-refresh-secret-key-minimum-32-chars
+      REFRESH_TOKEN_EXPIRY: 604800
+      PORT: 3000
+      API_VERSION: v1
+      CORS_ORIGINS: http://localhost:5173
+      LOG_LEVEL: debug
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./offsetcalc-api/src:/app/src:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Frontend ────────────────────────────────────────────────
+  ui:
+    build:
+      context: ./offsetcalc-ui
+      dockerfile: Dockerfile
+    ports:
+      - "5173:80"
+    environment:
+      VITE_API_URL: http://localhost:3000/api/v1
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  redis_data:
