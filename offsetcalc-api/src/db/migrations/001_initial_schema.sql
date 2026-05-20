@@ -242,6 +242,6 @@ VALUES (
   '550e8400-e29b-41d4-a716-446655440000',
   'f47ac10b-58cc-4372-a567-0e02b2c3d479',
   'admin@mohr.com',
-  '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewYpR1S.0...',
+  '$2b$10$QcLO1EFMD.WUXM1uhHQ5UuewNo.gWJ7noIKexopQ2FnStbO.1.37S',
   'Admin', 'MOHR', 'admin'
 ) ON CONFLICT DO NOTHING;
