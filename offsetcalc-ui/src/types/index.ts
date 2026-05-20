@@ -22,6 +22,13 @@ export interface AuthState {
   isAuthenticated: boolean;
 }
 
+export interface LoginResponse {
+  user: User;
+  tenant: Tenant;
+  access_token: string;
+  refresh_token: string;
+}
+
 // ── Config ──────────────────────────────────────────────────
 export interface PaperType {
   tipo: string;

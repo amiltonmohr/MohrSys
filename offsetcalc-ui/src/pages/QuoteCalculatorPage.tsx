@@ -3,7 +3,7 @@ import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useQuoteCalculator } from '../hooks/useQuote';
-import { QuoteResult, TenantConfig, QuoteInput } from '../types';
+import { TenantConfig, QuoteInput } from '../types';
 import { configService } from '../services/configService';
 import QuoteResults from '../components/QuoteResults';
 
@@ -28,8 +28,6 @@ const schema = z.object({
   rev_paginas: z.coerce.number().int().min(4).optional(),
 });
 type FormData = z.infer<typeof schema>;
-
-const brl = (n: number) => n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 export default function QuoteCalculatorPage() {
   const [config, setConfig] = useState<TenantConfig | null>(null);
