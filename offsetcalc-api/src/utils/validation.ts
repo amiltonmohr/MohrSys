@@ -56,7 +56,7 @@ export const quoteInputSchema = Joi.object({
     is: 'bloco', then: Joi.required(), otherwise: Joi.allow(null),
   }),
   bloco_chapa_modo: Joi.string().valid('unica', 'por-via').when('product_type', {
-    is: 'bloco', then: Joi.default('unica'), otherwise: Joi.allow(null),
+    is: 'bloco', then: Joi.string().valid('unica', 'por-via').default('unica'), otherwise: Joi.allow(null),
   }),
   rev_paginas: Joi.number().integer().min(4).when('product_type', {
     is: 'revista', then: Joi.required(), otherwise: Joi.allow(null),
