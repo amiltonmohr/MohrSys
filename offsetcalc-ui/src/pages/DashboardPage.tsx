@@ -1,110 +1,212 @@
-import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { quoteService } from '../services/quoteService';
-import { useAuthStore } from '../store/authStore';
-import { Quote } from '../types';
+import { useState, useEffect } from 'react';
 
-const brl = (n: number) => n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+interface DashboardStats {
+  total_orcamentos: number;
+  orcamentos_aceitos: number;
+  orcamentos_pendentes: number;
+  valor_total_aceito: number;
+  clientes_totais: number;
+  clientes_ativos: number;
+}
+
+interface RecentQuote {
+  id: string;
+  numero: string;
+  cliente: string;
+  total: number;
+  data: string;
+  status: string;
+}
 
 export default function DashboardPage() {
-  const { user, tenant } = useAuthStore();
-  const [quotes, setQuotes] = useState<Quote[]>([]);
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [recentQuotes, setRecentQuotes] = useState<RecentQuote[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    quoteService.list({ limit: 10 }).then(r => {
-      setQuotes(r.items);
-      setLoading(false);
-    }).catch(() => setLoading(false));
+    carregarDashboard();
   }, []);
 
-  const totalRevenue = quotes.filter(q => q.status === 'accepted').reduce((s, q) => s + q.total_brl, 0);
-  const pendingCount = quotes.filter(q => q.status === 'draft' || q.status === 'sent').length;
+  const carregarDashboard = async () => {
+    try {
+      const token = localStorage.getItem('access_token');
+      const res = await fetch('http://localhost:3000/api/v1/dashboard', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (data.data) {
+        setStats(data.data.stats);
+        setRecentQuotes(data.data.recentQuotes);
+      }
+    } catch (err) {
+      console.error('Erro ao carregar dashboard:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="section active">
+        <h2 style={{ fontSize: '22px', fontWeight: 800, marginBottom: '20px' }}>
+          📈 <span style={{ color: 'var(--accent)' }}>Dashboard</span>
+        </h2>
+        <p style={{ padding: '20px', color: 'var(--text2)' }}>Carregando dados...</p>
+      </div>
+    );
+  }
 
   return (
-    <div>
-      {/* Welcome */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-black font-display text-gray-800">
-          Olá, <span className="text-accent-600">{user?.first_name || user?.email}</span>
-        </h1>
-        <p className="text-gray-400 font-mono text-sm mt-0.5">{tenant?.name} · {tenant?.plan}</p>
-      </div>
+    <div className="section active">
+      <h2 style={{ fontSize: '22px', fontWeight: 800, marginBottom: '20px' }}>
+        📈 <span style={{ color: 'var(--accent)' }}>Dashboard</span>
+      </h2>
 
-      {/* KPIs */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
-        {[
-          { label: 'Orçamentos', value: quotes.length.toString(), color: 'text-accent-600' },
-          { label: 'Aguardando', value: pendingCount.toString(), color: 'text-yellow-600' },
-          { label: 'Aprovados', value: quotes.filter(q => q.status === 'accepted').length.toString(), color: 'text-green-600' },
-          { label: 'Receita', value: brl(totalRevenue), color: 'text-teal-600' },
-        ].map(kpi => (
-          <div key={kpi.label} className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
-            <div className="text-xs font-display font-bold uppercase tracking-wider text-gray-400 mb-2">{kpi.label}</div>
-            <div className={`font-mono text-2xl font-bold ${kpi.color}`}>{kpi.value}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* Quick actions */}
-      <div className="flex gap-3 mb-6">
-        <Link
-          to="/quotes/new"
-          className="px-5 py-2.5 bg-accent-600 text-white font-bold font-display uppercase tracking-wider text-sm rounded-lg shadow-md shadow-accent-600/30 hover:bg-accent-700 transition-colors"
-        >
-          + Novo Orçamento
-        </Link>
-        <Link
-          to="/clients"
-          className="px-5 py-2.5 bg-white border border-gray-200 text-gray-600 font-bold font-display uppercase tracking-wider text-sm rounded-lg hover:border-accent-600 hover:text-accent-600 transition-colors"
-        >
-          Clientes
-        </Link>
-      </div>
-
-      {/* Recent quotes */}
-      <div className="bg-white border border-gray-200 rounded-xl shadow-sm">
-        <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
-          <h2 className="font-display font-bold text-sm text-accent-600">Orçamentos Recentes</h2>
-          <Link to="/quotes" className="text-xs font-mono text-teal-600 hover:underline">Ver todos</Link>
-        </div>
-
-        {loading ? (
-          <div className="py-10 text-center text-gray-400 font-mono text-sm">Carregando...</div>
-        ) : quotes.length === 0 ? (
-          <div className="py-10 text-center text-gray-400 font-mono text-sm">Nenhum orçamento ainda</div>
-        ) : (
-          <div>
-            {quotes.slice(0, 8).map(q => (
-              <div key={q.id} className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 last:border-0 hover:bg-gray-50 transition-colors">
-                <div>
-                  <div className="font-display font-bold text-sm text-gray-800">
-                    #{q.reference_number}
-                    <span className="text-gray-400 font-normal text-xs ml-2">— {q.client_name || 'Sem cliente'}</span>
-                  </div>
-                  <div className="text-xs font-mono text-gray-400 mt-0.5">
-                    {q.description || `${q.paper_type} ${q.paper_gramatura}`} · {new Date(q.created_at).toLocaleDateString('pt-BR')}
-                  </div>
-                </div>
-                <div className="flex items-center gap-4">
-                  <div className="text-right">
-                    <div className="font-mono font-bold text-accent-600">{brl(q.total_brl)}</div>
-                    <div className="text-xs font-mono text-gray-400">R$ {q.unit_price_brl.toFixed(4).replace('.', ',')} /un</div>
-                  </div>
-                  <span className={`px-2 py-0.5 rounded text-xs font-bold ${
-                    q.status === 'accepted' ? 'bg-green-100 text-green-700' :
-                    q.status === 'rejected' ? 'bg-red-100 text-red-700' :
-                    q.status === 'sent' ? 'bg-blue-100 text-blue-700' :
-                    'bg-gray-100 text-gray-500'
-                  }`}>
-                    {q.status}
-                  </span>
-                </div>
+      {stats && (
+        <>
+          {/* Key Metrics */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+            gap: '16px',
+            marginBottom: '24px'
+          }}>
+            <div className="card" style={{ background: 'linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)', color: '#fff', padding: '20px' }}>
+              <div style={{ fontSize: '12px', fontWeight: 600, opacity: 0.8, marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                Total de Orçamentos
               </div>
-            ))}
+              <div style={{ fontSize: '32px', fontWeight: 800 }}>
+                {stats.total_orcamentos}
+              </div>
+            </div>
+
+            <div className="card" style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', color: '#fff', padding: '20px' }}>
+              <div style={{ fontSize: '12px', fontWeight: 600, opacity: 0.8, marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                Orçamentos Aceitos
+              </div>
+              <div style={{ fontSize: '32px', fontWeight: 800 }}>
+                {stats.orcamentos_aceitos}
+              </div>
+            </div>
+
+            <div className="card" style={{ background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', color: '#fff', padding: '20px' }}>
+              <div style={{ fontSize: '12px', fontWeight: 600, opacity: 0.8, marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                Pendentes
+              </div>
+              <div style={{ fontSize: '32px', fontWeight: 800 }}>
+                {stats.orcamentos_pendentes}
+              </div>
+            </div>
+
+            <div className="card" style={{ background: 'linear-gradient(135deg, #06b6d4 0%, #0891b2 100%)', color: '#fff', padding: '20px' }}>
+              <div style={{ fontSize: '12px', fontWeight: 600, opacity: 0.8, marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                Valor Total
+              </div>
+              <div style={{ fontSize: '24px', fontWeight: 800 }}>
+                R$ {stats.valor_total_aceito.toFixed(0)}
+              </div>
+            </div>
           </div>
-        )}
-      </div>
+
+          {/* Clients */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+            gap: '16px',
+            marginBottom: '24px'
+          }}>
+            <div className="card">
+              <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text2)', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                Clientes Cadastrados
+              </div>
+              <div style={{ fontSize: '28px', fontWeight: 800, color: 'var(--accent)' }}>
+                {stats.clientes_totais}
+              </div>
+            </div>
+
+            <div className="card">
+              <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text2)', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                Clientes Ativos
+              </div>
+              <div style={{ fontSize: '28px', fontWeight: 800, color: 'var(--accent2)' }}>
+                {stats.clientes_ativos}
+              </div>
+            </div>
+          </div>
+
+          {/* Recent Quotes */}
+          <div className="card">
+            <div className="card-title">Últimos Orçamentos</div>
+
+            {recentQuotes.length > 0 ? (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{
+                  width: '100%',
+                  borderCollapse: 'collapse',
+                  fontSize: '13px'
+                }}>
+                  <thead>
+                    <tr style={{ borderBottom: '2px solid var(--border)' }}>
+                      <th style={{ padding: '10px', textAlign: 'left', fontWeight: 600, color: 'var(--text2)' }}>Número</th>
+                      <th style={{ padding: '10px', textAlign: 'left', fontWeight: 600, color: 'var(--text2)' }}>Cliente</th>
+                      <th style={{ padding: '10px', textAlign: 'right', fontWeight: 600, color: 'var(--text2)' }}>Valor</th>
+                      <th style={{ padding: '10px', textAlign: 'center', fontWeight: 600, color: 'var(--text2)' }}>Status</th>
+                      <th style={{ padding: '10px', textAlign: 'left', fontWeight: 600, color: 'var(--text2)' }}>Data</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recentQuotes.map((q) => (
+                      <tr key={q.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                        <td style={{ padding: '10px', fontWeight: 600, color: 'var(--accent)' }}>{q.numero}</td>
+                        <td style={{ padding: '10px' }}>{q.cliente}</td>
+                        <td style={{ padding: '10px', textAlign: 'right', fontWeight: 600 }}>
+                          R$ {q.total.toFixed(2)}
+                        </td>
+                        <td style={{
+                          padding: '10px',
+                          textAlign: 'center'
+                        }}>
+                          <span style={{
+                            background: q.status === 'aceito' ? '#10b981' : q.status === 'enviado' ? '#f59e0b' : '#6b7280',
+                            color: '#fff',
+                            padding: '4px 8px',
+                            borderRadius: '4px',
+                            fontSize: '11px',
+                            fontWeight: 600
+                          }}>
+                            {q.status === 'aceito' ? 'Aceito' : q.status === 'enviado' ? 'Enviado' : 'Rascunho'}
+                          </span>
+                        </td>
+                        <td style={{ padding: '10px', fontSize: '12px', color: 'var(--text2)' }}>
+                          {new Date(q.data).toLocaleDateString('pt-BR')}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p style={{ padding: '20px', color: 'var(--text2)' }}>Nenhum orçamento ainda</p>
+            )}
+          </div>
+
+          {/* Performance Info */}
+          <div style={{
+            marginTop: '20px',
+            padding: '16px',
+            background: 'var(--surface2)',
+            borderRadius: '8px',
+            fontSize: '12px',
+            color: 'var(--text2)'
+          }}>
+            <strong>Taxa de conversão:</strong>{' '}
+            {stats.total_orcamentos > 0
+              ? ((stats.orcamentos_aceitos / stats.total_orcamentos) * 100).toFixed(1)
+              : '0'
+            }%
+          </div>
+        </>
+      )}
     </div>
   );
 }
