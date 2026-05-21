@@ -34,13 +34,13 @@ Sistema de orçamento para gráficas offset — plataforma SaaS multi-tenant ven
 - Persistência API: opcional/eventual, funciona offline
 
 ## Branch ativa de desenvolvimento
-- Próxima branch: `feature/historico-op-pdf` ou `feature/dashboard-charts`
-- PRs mergeados: #1 (ui-fidelity), #2 (CalculoPage), #3 (ConfigPage) — todos na main
 - **Nunca commitar direto na main** — sempre via feature/ ou fix/
+- Último merge: feature/pages-finais → main (commit ad52556, 2026-05-20)
 
 ## Progresso de implementação (atualizado 2026-05-20)
 
-### ✅ Concluído (na main — commit 9de4bfb)
+### ✅ TUDO CONCLUÍDO (na main — commit ad52556)
+
 1. **`src/utils/calculator.ts`** — Engine de cálculo completa
    - ATENÇÃO: propriedade `tiраgemInput` usa Cirílicos (р=U+0440, а=U+0430) — copiar bytes ao usar
 
@@ -56,6 +56,7 @@ Sistema de orçamento para gráficas offset — plataforma SaaS multi-tenant ven
    - 3 modos: Simples / Bloco / Revista
    - Presets, formato dinâmico, tira/retira, modal acabamentos com parâmetros
    - Comparativo 6 tiragens, autocomplete cliente, salvar → histórico
+   - useEffect on mount: lê `mohrsys_goto_cliente` do localStorage para pré-preencher cliente
 
 7. **`src/pages/ConfigPage.tsx`** — COMPLETA, 5 abas, edição inline
    - Papéis: CRUD, tabela editável inline
@@ -65,17 +66,30 @@ Sistema de orçamento para gráficas offset — plataforma SaaS multi-tenant ven
    - Custos Indiretos: aluguel/energia/manutenção/outros → ciPorHora automático
    - Banner "não salvo", modal confirmação reset, Restaurar Padrão
 
-### 🔲 Pendente (próximas implementações)
-8. `src/pages/ClientesPage.tsx` — busca melhorada, botão "→ Orçamento"
-9. `src/pages/HistoricoPage.tsx` — OP (HTML nova janela), PDF/Proposta, editar, duplicar
-10. `src/pages/DashboardPage.tsx` — 4 gráficos Chart.js (barras, doughnut, horizontal, stacked)
+8. **`src/pages/ClientesPage.tsx`** — COMPLETA
+   - KPIs: total e cadastrados nos últimos 30 dias
+   - Busca/filtro useMemo, edição inline Enter/Escape, modal exclusão
+   - "→ Orçamento": salva nome em localStorage('mohrsys_goto_cliente') + onGoTo('orcamento')
+
+9. **`src/pages/HistoricoPage.tsx`** — COMPLETA
+   - gerarOP(): HTML completo Ordem de Produção, window.open + print on load
+   - gerarProposta(): proposta formal para cliente (sem custos internos)
+   - KPIs: total, aprovados, valor aprovado, taxa de conversão
+   - Filtro busca + status; duplicar, editar status inline, aprovar toggle, excluir modal
+
+10. **`src/pages/DashboardPage.tsx`** — COMPLETA (recharts, 100% client-side)
+    - 6 KPIs do AppContext: total, aceitos, valor aceito, taxa conversão, 30 dias, ticket médio
+    - BarChart: orçamentos por mês (últimos 6 meses)
+    - PieChart: distribuição por status (rascunho/enviado/aceito/recusado)
+    - BarChart horizontal: top 5 clientes por valor total
+    - AreaChart: receita mensal com gradiente
 
 ## Módulos do HTML original que DEVEM estar no front (100% fiel)
-1. **Cálculo** — layout 3 colunas; tipos simples/bloco/revista; presets; formato-impressão dinâmico; tira/retira; modal de acabamentos com parâmetros; comparativo de tiragens; salvar orçamento
-2. **Clientes** — cadastro nome+tel; busca; dropdown autocomplete no orçamento; "→ Orçamento"
-3. **Configurações** — tabela papéis editável; chapas; tintas; máquinas; acabamentos; custos indiretos
-4. **Orçamentos** — lista; aprovar; OP (HTML para nova janela); PDF/Proposta; editar; duplicar
-5. **Dashboard** — 6 KPIs; 4 gráficos Chart.js (barras, doughnut, horizontal, stacked)
+1. **Cálculo** — layout 3 colunas; tipos simples/bloco/revista; presets; formato-impressão dinâmico; tira/retira; modal de acabamentos com parâmetros; comparativo de tiragens; salvar orçamento ✅
+2. **Clientes** — cadastro nome+tel; busca; dropdown autocomplete no orçamento; "→ Orçamento" ✅
+3. **Configurações** — tabela papéis editável; chapas; tintas; máquinas; acabamentos; custos indiretos ✅
+4. **Orçamentos** — lista; aprovar; OP (HTML para nova janela); PDF/Proposta; editar; duplicar ✅
+5. **Dashboard** — 6 KPIs; 4 gráficos recharts (barras, doughnut, horizontal, área) ✅
 
 **Why:** O HTML original (offsetcalc_5.html) é o produto funcional validado com cliente — a migração para React deve ser 100% fiel em design e funcionalidade.
 **How to apply:** Sempre comparar qualquer página com o HTML antes de considerar pronto. A lógica de cálculo em calculator.ts deve produzir os mesmos resultados que o HTML.
