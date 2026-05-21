@@ -137,6 +137,11 @@ export default function CalculoPage({ onGoTo }: Props) {
     }
   }, [gramaturasDisponiveis]);
 
+  useEffect(() => {
+    const sel = localStorage.getItem('mohrsys_goto_cliente');
+    if (sel) { setClienteNome(sel); localStorage.removeItem('mohrsys_goto_cliente'); }
+  }, []);
+
   const formatoSel = formatosDisponiveis.find(f => f.nome === formatoNome);
   const formatoPermiteTira = !!(
     tipoAtivo === 'simples' && coresV > 0 &&
