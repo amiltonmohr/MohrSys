@@ -1,370 +1,622 @@
 import { useState, useEffect } from 'react';
+import { useApp } from '../context/AppContext';
+import {
+  AppConfig, PapelConfig, MaquinaConfig, AcabamentoConfig,
+} from '../utils/calculator';
 
-interface Material {
-  id: string;
-  tipo: string;
-  gramatura: string;
-  preco_kg: number;
-  fator_absorcao: number;
-}
+type Tab = 'papeis' | 'maquinas' | 'acabamentos' | 'chapas' | 'ci';
 
-interface Maquina {
-  id: string;
-  nome: string;
-  largura_util_cm: number;
-  altura_util_cm: number;
-  cpm: number;
-  setup_minutos: number;
-}
+const FORMULAS = [
+  { val: 'laminacao',   label: 'Laminação' },
+  { val: 'verniz_total',label: 'Verniz Total' },
+  { val: 'verniz_local',label: 'Verniz Local' },
+  { val: 'corte_vinco', label: 'Corte e Vinco' },
+  { val: 'por_mil',     label: 'Por Mil' },
+  { val: 'fixo',        label: 'Valor Fixo' },
+] as const;
+
+const PAPEL_FORMATOS = ['66x96cm', '52x74cm', '36x52cm', '46x64cm', '48x66cm'];
+
+const emptyPapel = (): PapelConfig => ({ tipo: '', gramatura: '', formato: '66x96cm', precoPorKg: 12, fatorAbs: 1.0 });
+const emptyMaquina = (): MaquinaConfig => ({ nome: '', formato: '36x52cm', custoHora: 90, velocidade: 5000, pinca: 1.2 });
+const emptyAcab = (): AcabamentoConfig => ({ nome: '', formula: 'laminacao', valorM2: 1.80 });
 
 export default function ConfigPage() {
-  const [materials, setMaterials] = useState<Material[]>([]);
-  const [machines, setMachines] = useState<Maquina[]>([]);
-  const [activeTab, setActiveTab] = useState('materiais');
-  const [loading, setLoading] = useState(false);
+  const { config, salvarConfig, resetConfig } = useApp();
+  const [tab, setTab] = useState<Tab>('papeis');
+  const [draft, setDraft] = useState<AppConfig>({ ...config });
+  const [dirty, setDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [confirmReset, setConfirmReset] = useState(false);
 
-  // Material form
-  const [matTipo, setMatTipo] = useState('');
-  const [matGramatura, setMatGramatura] = useState('');
-  const [matPreco, setMatPreco] = useState('');
-  const [matFator, setMatFator] = useState('');
+  // Novo papel form
+  const [newPapel, setNewPapel] = useState<PapelConfig>(emptyPapel());
+  // Nova máquina form
+  const [newMaq, setNewMaq] = useState<MaquinaConfig>(emptyMaquina());
+  // Novo acabamento form
+  const [newAcab, setNewAcab] = useState<AcabamentoConfig>(emptyAcab());
 
-  // Machine form
-  const [maqNome, setMaqNome] = useState('');
-  const [maqLargura, setMaqLargura] = useState('');
-  const [maqAltura, setMaqAltura] = useState('');
-  const [maqCpm, setMaqCpm] = useState('');
-  const [maqSetup, setMaqSetup] = useState('');
+  useEffect(() => { setDraft({ ...config }); setDirty(false); }, [config]);
 
-  useEffect(() => {
-    carregarConfig();
-  }, []);
-
-  const carregarConfig = async () => {
-    try {
-      const token = localStorage.getItem('access_token');
-      const res = await fetch('http://localhost:3000/api/v1/config', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      const data = await res.json();
-      if (data.data) {
-        setMaterials(data.data.materials);
-        setMachines(data.data.machines);
-      }
-    } catch (err) {
-      console.error('Erro ao carregar config:', err);
-    }
+  const update = (patch: Partial<AppConfig>) => {
+    setDraft(prev => {
+      const next = { ...prev, ...patch };
+      // recalcula ciPorHora automaticamente
+      const total = (next.ciAluguel || 0) + (next.ciEnergia || 0) + (next.ciManutencao || 0) + (next.ciOutros || 0);
+      next.ciPorHora = next.ciHoras > 0 ? parseFloat((total / next.ciHoras).toFixed(2)) : 0;
+      return next;
+    });
+    setDirty(true);
   };
 
-  const adicionarMaterial = async () => {
-    if (!matTipo || !matGramatura || !matPreco) {
-      alert('Preencha todos os campos obrigatórios');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const token = localStorage.getItem('access_token');
-      const res = await fetch('http://localhost:3000/api/v1/config/materials', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          tipo: matTipo,
-          gramatura: matGramatura,
-          preco_kg: parseFloat(matPreco),
-          fator_absorcao: parseFloat(matFator) || 1.0
-        })
-      });
-
-      if (res.ok) {
-        setMatTipo('');
-        setMatGramatura('');
-        setMatPreco('');
-        setMatFator('');
-        carregarConfig();
-      } else {
-        alert('Erro ao salvar material');
-      }
-    } catch (err) {
-      console.error('Erro:', err);
-      alert('Erro de conexão');
-    } finally {
-      setLoading(false);
-    }
+  const handleSalvar = async () => {
+    setSaving(true);
+    await salvarConfig(draft);
+    setDirty(false);
+    setSaving(false);
   };
 
-  const adicionarMaquina = async () => {
-    if (!maqNome || !maqLargura || !maqAltura || !maqCpm) {
-      alert('Preencha todos os campos obrigatórios');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const token = localStorage.getItem('access_token');
-      const res = await fetch('http://localhost:3000/api/v1/config/machines', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          nome: maqNome,
-          largura_util_cm: parseFloat(maqLargura),
-          altura_util_cm: parseFloat(maqAltura),
-          cpm: parseFloat(maqCpm),
-          setup_minutos: parseFloat(maqSetup) || 15
-        })
-      });
-
-      if (res.ok) {
-        setMaqNome('');
-        setMaqLargura('');
-        setMaqAltura('');
-        setMaqCpm('');
-        setMaqSetup('');
-        carregarConfig();
-      } else {
-        alert('Erro ao salvar máquina');
-      }
-    } catch (err) {
-      console.error('Erro:', err);
-      alert('Erro de conexão');
-    } finally {
-      setLoading(false);
-    }
+  const handleReset = () => {
+    resetConfig();
+    setConfirmReset(false);
+    setDirty(false);
   };
+
+  // ── Papéis ────────────────────────────────────────────────────────────────
+  const updatePapel = (i: number, field: keyof PapelConfig, val: string | number) => {
+    const papeis = draft.papeis.map((p, idx) => idx === i ? { ...p, [field]: val } : p);
+    update({ papeis });
+  };
+  const removePapel = (i: number) => update({ papeis: draft.papeis.filter((_, idx) => idx !== i) });
+  const addPapel = () => {
+    if (!newPapel.tipo || !newPapel.gramatura) return;
+    update({ papeis: [...draft.papeis, { ...newPapel }] });
+    setNewPapel(emptyPapel());
+  };
+
+  // ── Máquinas ──────────────────────────────────────────────────────────────
+  const updateMaq = (i: number, field: keyof MaquinaConfig, val: string | number) => {
+    const maquinas = draft.maquinas.map((m, idx) => idx === i ? { ...m, [field]: val } : m);
+    update({ maquinas });
+  };
+  const removeMaq = (i: number) => update({ maquinas: draft.maquinas.filter((_, idx) => idx !== i) });
+  const addMaq = () => {
+    if (!newMaq.nome) return;
+    update({ maquinas: [...draft.maquinas, { ...newMaq }] });
+    setNewMaq(emptyMaquina());
+  };
+
+  // ── Acabamentos ───────────────────────────────────────────────────────────
+  const updateAcab = (i: number, patch: Partial<AcabamentoConfig>) => {
+    const acabamentos = draft.acabamentos.map((a, idx) => idx === i ? { ...a, ...patch } : a);
+    update({ acabamentos });
+  };
+  const removeAcab = (i: number) => update({ acabamentos: draft.acabamentos.filter((_, idx) => idx !== i) });
+  const addAcab = () => {
+    if (!newAcab.nome) return;
+    update({ acabamentos: [...draft.acabamentos, { ...newAcab }] });
+    setNewAcab(emptyAcab());
+  };
+
+  // ── CI derivado ───────────────────────────────────────────────────────────
+  const ciTotal = (draft.ciAluguel || 0) + (draft.ciEnergia || 0) + (draft.ciManutencao || 0) + (draft.ciOutros || 0);
+
+  const tabs: { id: Tab; label: string }[] = [
+    { id: 'papeis',    label: 'Papéis'           },
+    { id: 'maquinas',  label: 'Máquinas'          },
+    { id: 'acabamentos', label: 'Acabamentos'     },
+    { id: 'chapas',    label: 'Chapas & Tintas'   },
+    { id: 'ci',        label: 'Custos Indiretos'  },
+  ];
 
   return (
     <div className="section active">
-      <h2 style={{ fontSize: '22px', fontWeight: 800, marginBottom: '20px' }}>
-        ⚙️ <span style={{ color: 'var(--accent)' }}>Configurações</span>
-      </h2>
-
-      <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', borderBottom: '1px solid var(--border)' }}>
-        <button
-          style={{
-            padding: '10px 20px',
-            border: 'none',
-            background: activeTab === 'materiais' ? 'var(--accent)' : 'transparent',
-            color: activeTab === 'materiais' ? '#fff' : 'var(--text)',
-            cursor: 'pointer',
-            borderRadius: '6px 6px 0 0',
-            fontWeight: 600
-          }}
-          onClick={() => setActiveTab('materiais')}
-        >
-          Materiais
-        </button>
-        <button
-          style={{
-            padding: '10px 20px',
-            border: 'none',
-            background: activeTab === 'maquinas' ? 'var(--accent)' : 'transparent',
-            color: activeTab === 'maquinas' ? '#fff' : 'var(--text)',
-            cursor: 'pointer',
-            borderRadius: '6px 6px 0 0',
-            fontWeight: 600
-          }}
-          onClick={() => setActiveTab('maquinas')}
-        >
-          Máquinas
-        </button>
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
+        <h2 style={{ fontSize: '22px', fontWeight: 800 }}>
+          Configurações <span style={{ color: 'var(--accent)' }}>do Sistema</span>
+        </h2>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <button className="btn btn-secondary" onClick={() => setConfirmReset(true)}>
+            Restaurar Padrão
+          </button>
+          <button className="btn btn-primary" onClick={handleSalvar} disabled={!dirty || saving}
+            style={{ opacity: dirty ? 1 : 0.5, minWidth: '120px' }}>
+            {saving ? 'Salvando...' : dirty ? 'Salvar Alterações' : 'Salvo'}
+          </button>
+        </div>
       </div>
 
-      {activeTab === 'materiais' && (
-        <>
-          <div className="card" style={{ marginBottom: '20px' }}>
-            <div className="card-title">Adicionar Material</div>
-
-            <div className="grid-2">
-              <div className="field">
-                <label>Tipo de Papel</label>
-                <input
-                  type="text"
-                  value={matTipo}
-                  onChange={(e) => setMatTipo(e.target.value)}
-                  placeholder="ex: Couchê, Offset, Couché..."
-                />
-              </div>
-              <div className="field">
-                <label>Gramatura</label>
-                <input
-                  type="text"
-                  value={matGramatura}
-                  onChange={(e) => setMatGramatura(e.target.value)}
-                  placeholder="ex: 115g, 240g..."
-                />
-              </div>
-            </div>
-
-            <div className="grid-2">
-              <div className="field">
-                <label>Preço por kg (R$)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={matPreco}
-                  onChange={(e) => setMatPreco(e.target.value)}
-                  placeholder="0.00"
-                />
-              </div>
-              <div className="field">
-                <label>Fator de Absorção</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={matFator}
-                  onChange={(e) => setMatFator(e.target.value)}
-                  placeholder="1.0"
-                />
-              </div>
-            </div>
-
-            <button
-              className="btn btn-primary"
-              onClick={adicionarMaterial}
-              disabled={loading}
-            >
-              {loading ? 'Salvando...' : 'Adicionar Material'}
-            </button>
-          </div>
-
-          <div className="card">
-            <div className="card-title">Materiais Cadastrados ({materials.length})</div>
-            {materials.length > 0 ? (
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
-                  <thead>
-                    <tr style={{ borderBottom: '2px solid var(--border)' }}>
-                      <th style={{ padding: '8px', textAlign: 'left', fontWeight: 600, color: 'var(--text2)' }}>Tipo</th>
-                      <th style={{ padding: '8px', textAlign: 'left', fontWeight: 600, color: 'var(--text2)' }}>Gramatura</th>
-                      <th style={{ padding: '8px', textAlign: 'right', fontWeight: 600, color: 'var(--text2)' }}>R$/kg</th>
-                      <th style={{ padding: '8px', textAlign: 'right', fontWeight: 600, color: 'var(--text2)' }}>Fator</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {materials.map((m) => (
-                      <tr key={m.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                        <td style={{ padding: '8px' }}>{m.tipo}</td>
-                        <td style={{ padding: '8px' }}>{m.gramatura}</td>
-                        <td style={{ padding: '8px', textAlign: 'right' }}>R$ {m.preco_kg.toFixed(2)}</td>
-                        <td style={{ padding: '8px', textAlign: 'right' }}>{m.fator_absorcao}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <p style={{ padding: '20px', color: 'var(--text2)' }}>Nenhum material cadastrado</p>
-            )}
-          </div>
-        </>
+      {dirty && (
+        <div className="info-badge" style={{ background: 'rgba(245,158,11,0.08)', borderColor: 'rgba(245,158,11,0.3)', color: '#d97706', marginBottom: '12px' }}>
+          Há alterações não salvas — clique em "Salvar Alterações" para confirmar.
+        </div>
       )}
 
-      {activeTab === 'maquinas' && (
-        <>
-          <div className="card" style={{ marginBottom: '20px' }}>
-            <div className="card-title">Adicionar Máquina</div>
+      {/* Tabs */}
+      <div style={{ display: 'flex', gap: '4px', marginBottom: '20px', borderBottom: '2px solid var(--border)', flexWrap: 'wrap' }}>
+        {tabs.map(t => (
+          <button key={t.id}
+            onClick={() => setTab(t.id)}
+            style={{
+              padding: '10px 18px', border: 'none', cursor: 'pointer', fontSize: '12px',
+              fontWeight: 700, fontFamily: 'var(--display)', letterSpacing: '0.5px', textTransform: 'uppercase',
+              borderRadius: '6px 6px 0 0', marginBottom: '-2px',
+              background: tab === t.id ? 'var(--accent)' : 'transparent',
+              color: tab === t.id ? '#fff' : 'var(--text2)',
+              borderBottom: tab === t.id ? '2px solid var(--accent)' : '2px solid transparent',
+            }}>
+            {t.label}
+          </button>
+        ))}
+      </div>
 
-            <div className="field">
-              <label>Nome da Máquina</label>
-              <input
-                type="text"
-                value={maqNome}
-                onChange={(e) => setMaqNome(e.target.value)}
-                placeholder="ex: GTO 52 (4 cores)"
-              />
+      {/* ══ TAB: PAPÉIS ══════════════════════════════════════════════════════ */}
+      {tab === 'papeis' && (
+        <div>
+          <div className="card">
+            <div className="card-title">Tabela de Papéis ({draft.papeis.length})</div>
+            <div style={{ overflowX: 'auto' }}>
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Tipo</th>
+                    <th>Gramatura</th>
+                    <th>Formato</th>
+                    <th style={{ textAlign: 'right' }}>R$/kg</th>
+                    <th style={{ textAlign: 'right' }}>Fator Abs.</th>
+                    <th style={{ width: '40px' }}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {draft.papeis.map((p, i) => (
+                    <tr key={i}>
+                      <td>
+                        <input value={p.tipo} onChange={e => updatePapel(i, 'tipo', e.target.value)} />
+                      </td>
+                      <td>
+                        <input value={p.gramatura} onChange={e => updatePapel(i, 'gramatura', e.target.value)} style={{ width: '70px' }} />
+                      </td>
+                      <td>
+                        <select value={p.formato} onChange={e => updatePapel(i, 'formato', e.target.value)}>
+                          {PAPEL_FORMATOS.map(f => <option key={f} value={f}>{f}</option>)}
+                        </select>
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        <input type="number" step="0.01" value={p.precoPorKg}
+                          onChange={e => updatePapel(i, 'precoPorKg', parseFloat(e.target.value) || 0)}
+                          style={{ textAlign: 'right', width: '80px' }} />
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        <input type="number" step="0.01" min="0.5" max="2.0" value={p.fatorAbs}
+                          onChange={e => updatePapel(i, 'fatorAbs', parseFloat(e.target.value) || 1)}
+                          style={{ textAlign: 'right', width: '70px' }} />
+                      </td>
+                      <td>
+                        <button className="btn-icon" onClick={() => removePapel(i)} title="Remover">✕</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
+          </div>
 
-            <div className="grid-2">
-              <div className="field">
-                <label>Largura Útil (cm)</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  value={maqLargura}
-                  onChange={(e) => setMaqLargura(e.target.value)}
-                  placeholder="52"
-                />
+          {/* Adicionar papel */}
+          <div className="card">
+            <div className="card-title">Adicionar Papel</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '12px', alignItems: 'end' }}>
+              <div className="field" style={{ margin: 0 }}>
+                <label>Tipo</label>
+                <input value={newPapel.tipo} onChange={e => setNewPapel(p => ({ ...p, tipo: e.target.value }))}
+                  placeholder="ex: Couchê" />
               </div>
-              <div className="field">
-                <label>Altura Útil (cm)</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  value={maqAltura}
-                  onChange={(e) => setMaqAltura(e.target.value)}
-                  placeholder="74"
-                />
+              <div className="field" style={{ margin: 0 }}>
+                <label>Gramatura</label>
+                <input value={newPapel.gramatura} onChange={e => setNewPapel(p => ({ ...p, gramatura: e.target.value }))}
+                  placeholder="ex: 115g" />
               </div>
+              <div className="field" style={{ margin: 0 }}>
+                <label>Formato</label>
+                <select value={newPapel.formato} onChange={e => setNewPapel(p => ({ ...p, formato: e.target.value }))}>
+                  {PAPEL_FORMATOS.map(f => <option key={f} value={f}>{f}</option>)}
+                </select>
+              </div>
+              <div className="field" style={{ margin: 0 }}>
+                <label>R$/kg</label>
+                <input type="number" step="0.01" value={newPapel.precoPorKg}
+                  onChange={e => setNewPapel(p => ({ ...p, precoPorKg: parseFloat(e.target.value) || 0 }))} />
+              </div>
+              <div className="field" style={{ margin: 0 }}>
+                <label>Fator Abs.</label>
+                <input type="number" step="0.01" value={newPapel.fatorAbs}
+                  onChange={e => setNewPapel(p => ({ ...p, fatorAbs: parseFloat(e.target.value) || 1 }))} />
+              </div>
+              <button className="btn btn-primary" onClick={addPapel} style={{ alignSelf: 'flex-end', marginBottom: '1px' }}>
+                + Adicionar
+              </button>
             </div>
+          </div>
+        </div>
+      )}
 
-            <div className="grid-2">
-              <div className="field">
-                <label>CPM (cópias/minuto)</label>
-                <input
-                  type="number"
-                  value={maqCpm}
-                  onChange={(e) => setMaqCpm(e.target.value)}
-                  placeholder="5000"
-                />
-              </div>
-              <div className="field">
-                <label>Setup (minutos)</label>
-                <input
-                  type="number"
-                  value={maqSetup}
-                  onChange={(e) => setMaqSetup(e.target.value)}
-                  placeholder="15"
-                />
-              </div>
+      {/* ══ TAB: MÁQUINAS ════════════════════════════════════════════════════ */}
+      {tab === 'maquinas' && (
+        <div>
+          <div className="card">
+            <div className="card-title">Máquinas Cadastradas ({draft.maquinas.length})</div>
+            <div style={{ overflowX: 'auto' }}>
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Nome</th>
+                    <th>Formato Útil</th>
+                    <th style={{ textAlign: 'right' }}>R$/hora</th>
+                    <th style={{ textAlign: 'right' }}>Vel. (cph)</th>
+                    <th style={{ textAlign: 'right' }}>Pinça (cm)</th>
+                    <th style={{ width: '40px' }}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {draft.maquinas.map((m, i) => (
+                    <tr key={i}>
+                      <td>
+                        <input value={m.nome} onChange={e => updateMaq(i, 'nome', e.target.value)} />
+                      </td>
+                      <td>
+                        <input value={m.formato} onChange={e => updateMaq(i, 'formato', e.target.value)}
+                          placeholder="ex: 36x52cm" style={{ width: '90px' }} />
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        <input type="number" value={m.custoHora}
+                          onChange={e => updateMaq(i, 'custoHora', parseFloat(e.target.value) || 0)}
+                          style={{ textAlign: 'right', width: '80px' }} />
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        <input type="number" value={m.velocidade}
+                          onChange={e => updateMaq(i, 'velocidade', parseInt(e.target.value) || 0)}
+                          style={{ textAlign: 'right', width: '80px' }} />
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        <input type="number" step="0.1" value={m.pinca}
+                          onChange={e => updateMaq(i, 'pinca', parseFloat(e.target.value) || 1.2)}
+                          style={{ textAlign: 'right', width: '70px' }} />
+                      </td>
+                      <td>
+                        <button className="btn-icon" onClick={() => removeMaq(i)}>✕</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-
-            <button
-              className="btn btn-primary"
-              onClick={adicionarMaquina}
-              disabled={loading}
-            >
-              {loading ? 'Salvando...' : 'Adicionar Máquina'}
-            </button>
           </div>
 
           <div className="card">
-            <div className="card-title">Máquinas Cadastradas ({machines.length})</div>
-            {machines.length > 0 ? (
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
-                  <thead>
-                    <tr style={{ borderBottom: '2px solid var(--border)' }}>
-                      <th style={{ padding: '8px', textAlign: 'left', fontWeight: 600, color: 'var(--text2)' }}>Nome</th>
-                      <th style={{ padding: '8px', textAlign: 'center', fontWeight: 600, color: 'var(--text2)' }}>Útil</th>
-                      <th style={{ padding: '8px', textAlign: 'right', fontWeight: 600, color: 'var(--text2)' }}>CPM</th>
-                      <th style={{ padding: '8px', textAlign: 'right', fontWeight: 600, color: 'var(--text2)' }}>Setup</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {machines.map((m) => (
-                      <tr key={m.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                        <td style={{ padding: '8px' }}>{m.nome}</td>
-                        <td style={{ padding: '8px', textAlign: 'center', fontSize: '11px', color: 'var(--text2)' }}>
-                          {m.largura_util_cm}×{m.altura_util_cm}
-                        </td>
-                        <td style={{ padding: '8px', textAlign: 'right' }}>{m.cpm}</td>
-                        <td style={{ padding: '8px', textAlign: 'right' }}>{m.setup_minutos}min</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+            <div className="card-title">Adicionar Máquina</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px', alignItems: 'end' }}>
+              <div className="field" style={{ margin: 0 }}>
+                <label>Nome</label>
+                <input value={newMaq.nome} onChange={e => setNewMaq(m => ({ ...m, nome: e.target.value }))}
+                  placeholder="ex: GTO 52 (4 cores)" />
               </div>
-            ) : (
-              <p style={{ padding: '20px', color: 'var(--text2)' }}>Nenhuma máquina cadastrada</p>
-            )}
+              <div className="field" style={{ margin: 0 }}>
+                <label>Formato Útil</label>
+                <input value={newMaq.formato} onChange={e => setNewMaq(m => ({ ...m, formato: e.target.value }))}
+                  placeholder="36x52cm" />
+              </div>
+              <div className="field" style={{ margin: 0 }}>
+                <label>R$/hora</label>
+                <input type="number" value={newMaq.custoHora}
+                  onChange={e => setNewMaq(m => ({ ...m, custoHora: parseFloat(e.target.value) || 0 }))} />
+              </div>
+              <div className="field" style={{ margin: 0 }}>
+                <label>Vel. (cph)</label>
+                <input type="number" value={newMaq.velocidade}
+                  onChange={e => setNewMaq(m => ({ ...m, velocidade: parseInt(e.target.value) || 0 }))} />
+              </div>
+              <div className="field" style={{ margin: 0 }}>
+                <label>Pinça (cm)</label>
+                <input type="number" step="0.1" value={newMaq.pinca}
+                  onChange={e => setNewMaq(m => ({ ...m, pinca: parseFloat(e.target.value) || 1.2 }))} />
+              </div>
+              <button className="btn btn-primary" onClick={addMaq} style={{ alignSelf: 'flex-end', marginBottom: '1px' }}>
+                + Adicionar
+              </button>
+            </div>
           </div>
-        </>
+        </div>
+      )}
+
+      {/* ══ TAB: ACABAMENTOS ═════════════════════════════════════════════════ */}
+      {tab === 'acabamentos' && (
+        <div>
+          <div className="card">
+            <div className="card-title">Acabamentos Cadastrados ({draft.acabamentos.length})</div>
+            <div style={{ overflowX: 'auto' }}>
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Nome</th>
+                    <th>Fórmula</th>
+                    <th style={{ textAlign: 'right' }}>R$/m²</th>
+                    <th style={{ textAlign: 'right' }}>R$/mil</th>
+                    <th style={{ textAlign: 'right' }}>Setup</th>
+                    <th style={{ textAlign: 'right' }}>%Área</th>
+                    <th style={{ textAlign: 'right' }}>Valor Fixo</th>
+                    <th style={{ width: '40px' }}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {draft.acabamentos.map((a, i) => (
+                    <tr key={i}>
+                      <td>
+                        <input value={a.nome} onChange={e => updateAcab(i, { nome: e.target.value })} />
+                      </td>
+                      <td>
+                        <select value={a.formula} onChange={e => updateAcab(i, { formula: e.target.value as AcabamentoConfig['formula'] })}>
+                          {FORMULAS.map(f => <option key={f.val} value={f.val}>{f.label}</option>)}
+                        </select>
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        {(a.formula === 'laminacao' || a.formula === 'verniz_total' || a.formula === 'verniz_local') ? (
+                          <input type="number" step="0.01" value={a.valorM2 ?? ''}
+                            onChange={e => updateAcab(i, { valorM2: parseFloat(e.target.value) || 0 })}
+                            style={{ textAlign: 'right', width: '70px' }} />
+                        ) : <span style={{ color: 'var(--text3)' }}>—</span>}
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        {(a.formula === 'corte_vinco' || a.formula === 'por_mil') ? (
+                          <input type="number" step="0.01" value={a.valorMil ?? ''}
+                            onChange={e => updateAcab(i, { valorMil: parseFloat(e.target.value) || 0 })}
+                            style={{ textAlign: 'right', width: '70px' }} />
+                        ) : <span style={{ color: 'var(--text3)' }}>—</span>}
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        {a.formula === 'corte_vinco' ? (
+                          <input type="number" value={a.setup ?? ''}
+                            onChange={e => updateAcab(i, { setup: parseFloat(e.target.value) || 0 })}
+                            style={{ textAlign: 'right', width: '70px' }} />
+                        ) : <span style={{ color: 'var(--text3)' }}>—</span>}
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        {a.formula === 'verniz_local' ? (
+                          <input type="number" min="1" max="100" value={a.percArea ?? ''}
+                            onChange={e => updateAcab(i, { percArea: parseFloat(e.target.value) || 30 })}
+                            style={{ textAlign: 'right', width: '60px' }} />
+                        ) : <span style={{ color: 'var(--text3)' }}>—</span>}
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        {a.formula === 'fixo' ? (
+                          <input type="number" step="0.01" value={a.valor ?? ''}
+                            onChange={e => updateAcab(i, { valor: parseFloat(e.target.value) || 0 })}
+                            style={{ textAlign: 'right', width: '80px' }} />
+                        ) : <span style={{ color: 'var(--text3)' }}>—</span>}
+                      </td>
+                      <td>
+                        <button className="btn-icon" onClick={() => removeAcab(i)}>✕</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="card-title">Adicionar Acabamento</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '12px', alignItems: 'end' }}>
+              <div className="field" style={{ margin: 0 }}>
+                <label>Nome</label>
+                <input value={newAcab.nome} onChange={e => setNewAcab(a => ({ ...a, nome: e.target.value }))}
+                  placeholder="ex: Laminação Fosca" />
+              </div>
+              <div className="field" style={{ margin: 0 }}>
+                <label>Fórmula</label>
+                <select value={newAcab.formula} onChange={e => setNewAcab(a => ({ ...a, formula: e.target.value as AcabamentoConfig['formula'] }))}>
+                  {FORMULAS.map(f => <option key={f.val} value={f.val}>{f.label}</option>)}
+                </select>
+              </div>
+              {(newAcab.formula === 'laminacao' || newAcab.formula === 'verniz_total' || newAcab.formula === 'verniz_local') && (
+                <div className="field" style={{ margin: 0 }}>
+                  <label>R$/m²</label>
+                  <input type="number" step="0.01" value={newAcab.valorM2 ?? ''}
+                    onChange={e => setNewAcab(a => ({ ...a, valorM2: parseFloat(e.target.value) || 0 }))} />
+                </div>
+              )}
+              {(newAcab.formula === 'corte_vinco' || newAcab.formula === 'por_mil') && (
+                <div className="field" style={{ margin: 0 }}>
+                  <label>R$/mil</label>
+                  <input type="number" step="0.01" value={newAcab.valorMil ?? ''}
+                    onChange={e => setNewAcab(a => ({ ...a, valorMil: parseFloat(e.target.value) || 0 }))} />
+                </div>
+              )}
+              {newAcab.formula === 'corte_vinco' && (
+                <div className="field" style={{ margin: 0 }}>
+                  <label>Setup (R$)</label>
+                  <input type="number" value={newAcab.setup ?? ''}
+                    onChange={e => setNewAcab(a => ({ ...a, setup: parseFloat(e.target.value) || 0 }))} />
+                </div>
+              )}
+              {newAcab.formula === 'verniz_local' && (
+                <div className="field" style={{ margin: 0 }}>
+                  <label>% Área</label>
+                  <input type="number" min="1" max="100" value={newAcab.percArea ?? ''}
+                    onChange={e => setNewAcab(a => ({ ...a, percArea: parseFloat(e.target.value) || 30 }))} />
+                </div>
+              )}
+              {newAcab.formula === 'fixo' && (
+                <div className="field" style={{ margin: 0 }}>
+                  <label>Valor Fixo (R$)</label>
+                  <input type="number" step="0.01" value={newAcab.valor ?? ''}
+                    onChange={e => setNewAcab(a => ({ ...a, valor: parseFloat(e.target.value) || 0 }))} />
+                </div>
+              )}
+              <button className="btn btn-primary" onClick={addAcab} style={{ alignSelf: 'flex-end', marginBottom: '1px' }}>
+                + Adicionar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══ TAB: CHAPAS & TINTAS ═════════════════════════════════════════════ */}
+      {tab === 'chapas' && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
+
+          <div className="card">
+            <div className="card-title">Chapas de Impressão</div>
+            <div className="field">
+              <label>Custo por Chapa (R$)</label>
+              <input type="number" step="0.01" value={draft.chapaCusto}
+                onChange={e => update({ chapaCusto: parseFloat(e.target.value) || 0 })} />
+              <div style={{ fontSize: '10px', color: 'var(--text2)', marginTop: '3px' }}>
+                Custo material da chapa offset (CTP ou convencional)
+              </div>
+            </div>
+            <div className="field">
+              <label>Setup por Chapa (R$)</label>
+              <input type="number" step="0.01" value={draft.setupPorChapa}
+                onChange={e => update({ setupPorChapa: parseFloat(e.target.value) || 0 })} />
+              <div style={{ fontSize: '10px', color: 'var(--text2)', marginTop: '3px' }}>
+                Custo de mão-de-obra de montagem por chapa
+              </div>
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="card-title">Tinta CMYK</div>
+            <div className="grid-2">
+              <div className="field">
+                <label>Preço (R$/kg)</label>
+                <input type="number" step="0.01" value={draft.tintaCmyk}
+                  onChange={e => update({ tintaCmyk: parseFloat(e.target.value) || 0 })} />
+              </div>
+              <div className="field">
+                <label>Densidade (sg)</label>
+                <input type="number" step="0.01" value={draft.tintaCmykSg}
+                  onChange={e => update({ tintaCmykSg: parseFloat(e.target.value) || 1 })} />
+              </div>
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="card-title">Tinta Pantone</div>
+            <div className="grid-2">
+              <div className="field">
+                <label>Preço (R$/kg)</label>
+                <input type="number" step="0.01" value={draft.tintaPantone}
+                  onChange={e => update({ tintaPantone: parseFloat(e.target.value) || 0 })} />
+              </div>
+              <div className="field">
+                <label>Densidade (sg)</label>
+                <input type="number" step="0.01" value={draft.tintaPantoneSg}
+                  onChange={e => update({ tintaPantoneSg: parseFloat(e.target.value) || 1 })} />
+              </div>
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="card-title">Tinta UV</div>
+            <div className="grid-2">
+              <div className="field">
+                <label>Preço (R$/kg)</label>
+                <input type="number" step="0.01" value={draft.tintaUv}
+                  onChange={e => update({ tintaUv: parseFloat(e.target.value) || 0 })} />
+              </div>
+              <div className="field">
+                <label>Densidade (sg)</label>
+                <input type="number" step="0.01" value={draft.tintaUvSg}
+                  onChange={e => update({ tintaUvSg: parseFloat(e.target.value) || 1 })} />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══ TAB: CUSTOS INDIRETOS ════════════════════════════════════════════ */}
+      {tab === 'ci' && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '16px' }}>
+          <div className="card">
+            <div className="card-title">Despesas Mensais Fixas</div>
+            <div className="field">
+              <label>Aluguel (R$/mês)</label>
+              <input type="number" step="1" value={draft.ciAluguel}
+                onChange={e => update({ ciAluguel: parseFloat(e.target.value) || 0 })} />
+            </div>
+            <div className="field">
+              <label>Energia Elétrica (R$/mês)</label>
+              <input type="number" step="1" value={draft.ciEnergia}
+                onChange={e => update({ ciEnergia: parseFloat(e.target.value) || 0 })} />
+            </div>
+            <div className="field">
+              <label>Manutenção (R$/mês)</label>
+              <input type="number" step="1" value={draft.ciManutencao}
+                onChange={e => update({ ciManutencao: parseFloat(e.target.value) || 0 })} />
+            </div>
+            <div className="field">
+              <label>Outros (R$/mês)</label>
+              <input type="number" step="1" value={draft.ciOutros}
+                onChange={e => update({ ciOutros: parseFloat(e.target.value) || 0 })} />
+            </div>
+            <div style={{ borderTop: '1px solid var(--border)', paddingTop: '12px', marginTop: '4px', display: 'flex', justifyContent: 'space-between', fontSize: '13px', fontWeight: 700 }}>
+              <span>Total Mensal</span>
+              <span style={{ fontFamily: 'var(--mono)', color: 'var(--accent)' }}>R$ {ciTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="card-title">Horas Produtivas & Taxa</div>
+            <div className="field">
+              <label>Horas Produtivas por Mês</label>
+              <input type="number" step="1" value={draft.ciHoras}
+                onChange={e => update({ ciHoras: parseInt(e.target.value) || 1 })} />
+              <div style={{ fontSize: '10px', color: 'var(--text2)', marginTop: '3px' }}>
+                Geralmente 176h (22 dias × 8h) ou conforme turno
+              </div>
+            </div>
+
+            <div style={{ background: 'linear-gradient(135deg,#f3f0ff,#edf9fc)', border: '1px solid rgba(124,58,237,.2)', borderRadius: '10px', padding: '20px', marginTop: '8px' }}>
+              <div style={{ fontSize: '10px', color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>
+                Taxa de Custo Indireto por Hora
+              </div>
+              <div style={{ fontSize: '32px', fontWeight: 800, color: 'var(--accent)', fontFamily: 'var(--mono)' }}>
+                R$ {draft.ciPorHora.toFixed(2)}
+              </div>
+              <div style={{ fontSize: '11px', color: 'var(--text2)', marginTop: '6px' }}>
+                = R$ {ciTotal.toFixed(2)} ÷ {draft.ciHoras}h
+              </div>
+            </div>
+
+            <div style={{ marginTop: '16px', fontSize: '11px', color: 'var(--text2)', lineHeight: '1.6', padding: '10px', background: 'var(--surface2)', borderRadius: '6px' }}>
+              Esta taxa é aplicada a cada hora de máquina cobrada no orçamento como custo de estrutura da empresa.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de confirmação de reset */}
+      {confirmReset && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.6)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px'
+        }}>
+          <div style={{ background: 'var(--surface)', borderRadius: '12px', padding: '32px', maxWidth: '400px', width: '100%', textAlign: 'center' }}>
+            <div style={{ fontSize: '24px', marginBottom: '12px' }}>⚠️</div>
+            <div style={{ fontSize: '16px', fontWeight: 700, marginBottom: '8px' }}>Restaurar Configuração Padrão?</div>
+            <div style={{ fontSize: '13px', color: 'var(--text2)', marginBottom: '24px', lineHeight: '1.6' }}>
+              Todos os papéis, máquinas, acabamentos e parâmetros serão revertidos para os valores padrão do sistema.
+              Esta ação não pode ser desfeita.
+            </div>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+              <button className="btn btn-secondary" onClick={() => setConfirmReset(false)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={handleReset}
+                style={{ background: '#ef4444', boxShadow: '0 2px 8px rgba(239,68,68,.3)' }}>
+                Sim, restaurar padrão
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
