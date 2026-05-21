@@ -178,7 +178,7 @@ function gerarProposta(entry: OrcamentoEntry): string {
       ${(res?.unitarioLabel as string) || 'Valor Unitário'}:
       <strong style="color:#065f46">R$ ${n(res?.unitario ?? entry.unitario as number, 4)}</strong>
     </div>
-    ${(res?.tiragem as number) ? `<div style="font-size:12px;color:#6b5f8a;margin-top:4px">Tiragem: ${(res.tiragem as number).toLocaleString('pt-BR')} unidades</div>` : ''}
+    ${res && (res.tiragem as number) ? `<div style="font-size:12px;color:#6b5f8a;margin-top:4px">Tiragem: ${(res.tiragem as number).toLocaleString('pt-BR')} unidades</div>` : ''}
   </div>
 
   <div class="sec">

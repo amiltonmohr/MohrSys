@@ -35,7 +35,19 @@ Sistema de orçamento para gráficas offset — plataforma SaaS multi-tenant ven
 
 ## Branch ativa de desenvolvimento
 - **Nunca commitar direto na main** — sempre via feature/ ou fix/
-- Último merge: feature/pages-finais → main (commit ad52556, 2026-05-20)
+- Último merge: feature/docker-deploy-fix → main (2026-05-21)
+
+## Docker (ambiente pronto e testado — 2026-05-21)
+- `docker compose up --build -d` sobe tudo: postgres + redis + api + ui
+- UI em http://localhost:5173 — nginx serve SPA e proxia /api → container api
+- API em http://localhost:3000 — healthcheck em /health
+- Credenciais: admin@mohr.com / Admin@123
+- **Problema resolvido:** `puppeteer` removido do package.json (causava timeout no build)
+- **Problema resolvido:** `bcrypt` → `bcryptjs` (sem compilação nativa no Alpine)
+- **Problema resolvido:** LoginPage reescrita sem Tailwind/react-hook-form/react-router
+- **Problema resolvido:** App.tsx usava window.location.href='/' → loop infinito; agora usa estado React
+- **Problema resolvido:** Router.tsx (scaffolding morto) removido
+- **Hash correto gerado:** bcryptjs.hash('Admin@123',10) → atualizado no DB e migration
 
 ## Progresso de implementação (atualizado 2026-05-20)
 

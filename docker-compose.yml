@@ -49,15 +49,13 @@ services:
       REFRESH_TOKEN_EXPIRY: 604800
       PORT: 3000
       API_VERSION: v1
-      CORS_ORIGINS: http://localhost:5173
+      CORS_ORIGINS: http://localhost:5173,http://localhost:3000
       LOG_LEVEL: debug
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-    volumes:
-      - ./offsetcalc-api/src:/app/src:ro
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
       interval: 10s
@@ -69,10 +67,10 @@ services:
     build:
       context: ./offsetcalc-ui
       dockerfile: Dockerfile
+      args:
+        VITE_API_URL: /api/v1
     ports:
       - "5173:80"
-    environment:
-      VITE_API_URL: http://localhost:3000/api/v1
     depends_on:
       api:
         condition: service_healthy
