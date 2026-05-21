@@ -1,4 +1,4 @@
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import { query, withTenantContext } from '../db/pool';
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../utils/jwt';
 import { LoginRequest, LoginResponse, User, Tenant } from '../types';

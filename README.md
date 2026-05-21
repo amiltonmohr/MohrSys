@@ -6,49 +6,33 @@ Sistema de orçamento para gráficas offset — plataforma SaaS multi-tenancy.
 
 | Camada | Tecnologia |
 |--------|-----------|
-| Frontend | React 18 + TypeScript + Vite + Tailwind CSS |
+| Frontend | React 18 + TypeScript + Vite (CSS puro, sem Tailwind) |
 | API | Node.js + Express + TypeScript |
-| Database | PostgreSQL 14+ com Row-Level Security (RLS) |
-| Cache | Redis |
+| Database | PostgreSQL 16 com Row-Level Security (RLS) |
+| Cache | Redis 7 |
 | Auth | JWT (15min) + Refresh Token (7 dias) |
-| CI/CD | GitHub Actions + Docker |
+| Deploy | Docker + Docker Compose |
 
-## Estrutura do Projeto
+## Páginas implementadas
 
-```
-MohrSys/
-├── offsetcalc-api/          # Backend REST API
-│   ├── src/
-│   │   ├── routes/          # Express routers
-│   │   ├── services/        # Business logic
-│   │   ├── middleware/       # Auth, validation, error handling
-│   │   ├── db/              # Pool, migrations
-│   │   ├── types/           # TypeScript interfaces
-│   │   └── utils/           # JWT, logger, response helpers
-│   ├── tests/               # Jest tests
-│   └── Dockerfile
-├── offsetcalc-ui/           # React SPA
-│   ├── src/
-│   │   ├── pages/           # Páginas principais
-│   │   ├── components/      # Componentes reutilizáveis
-│   │   ├── services/        # API calls (axios)
-│   │   ├── hooks/           # React hooks
-│   │   ├── store/           # Zustand state
-│   │   └── types/           # TypeScript interfaces
-│   └── Dockerfile
-├── docker-compose.yml       # Dev environment
-└── .github/workflows/       # CI/CD
-```
+| Página | Descrição |
+|--------|-----------|
+| **Login** | Autenticação JWT via API |
+| **Cálculo** | Orçamento offset: simples / bloco / revista — 100% client-side |
+| **Clientes** | CRUD de clientes com busca e integração com cálculo |
+| **Configurações** | Papéis, máquinas, acabamentos, chapas, tintas, custos indiretos |
+| **Orçamentos** | Histórico, OP, Proposta PDF, duplicar, aprovar, editar status |
+| **Dashboard** | 6 KPIs + 4 gráficos recharts (barras, pizza, horizontal, área) |
 
-## Setup Rápido (Docker)
+## Setup Rápido (Docker) ✅
 
 ```bash
 # 1. Clone o repo
-git clone https://github.com/amiltonmohr/MohrSys.git
+git clone git@github.com:amiltonmohr/MohrSys.git
 cd MohrSys
 
-# 2. Suba todos os serviços
-docker-compose up --build
+# 2. Build e suba todos os serviços
+docker compose up --build -d
 
 # 3. Acesse
 # Frontend: http://localhost:5173
@@ -56,11 +40,44 @@ docker-compose up --build
 # Health:   http://localhost:3000/health
 ```
 
-## Setup Manual (Desenvolvimento)
+**Credenciais padrão:** `admin@mohr.com` / `Admin@123`
 
-### 1. PostgreSQL
+> **Nota Docker:** Requer Docker Engine 24+ com o plugin `docker compose` (v2).  
+> No WSL2 (Ubuntu), instale com: `sudo apt-get install docker-ce docker-compose-plugin`
+
+## Estrutura do Projeto
+
+```
+MohrSys/
+├── offsetcalc-api/              # Backend REST API
+│   ├── src/
+│   │   ├── routes/              # Express routers (auth, quotes, config, clients, health)
+│   │   ├── services/            # Business logic (AuthService)
+│   │   ├── middleware/          # Auth JWT, errorHandler
+│   │   ├── db/                  # Pool pg, migrations SQL
+│   │   ├── types/               # TypeScript interfaces
+│   │   └── utils/               # JWT, logger, response helpers
+│   ├── Dockerfile               # Multi-stage: builder (tsc) + runner (node:alpine)
+│   └── package.json
+├── offsetcalc-ui/               # React SPA
+│   ├── src/
+│   │   ├── pages/               # CalculoPage, ConfigPage, ClientesPage,
+│   │   │                        # HistoricoPage, DashboardPage, LoginPage
+│   │   ├── context/             # AppContext (localStorage + API sync)
+│   │   ├── utils/               # calculator.ts — engine de cálculo client-side
+│   │   └── index.css            # CSS puro com variáveis CSS
+│   ├── nginx.conf               # Serve SPA + proxy /api → API container
+│   └── Dockerfile               # Multi-stage: builder (vite build) + runner (nginx)
+├── docker-compose.yml           # postgres + redis + api + ui
+└── .claude/memory/              # Memória de desenvolvimento (Claude Code)
+```
+
+## Setup Manual (Desenvolvimento WSL)
+
+### 1. PostgreSQL local
 
 ```bash
+# A migration já cria o schema e o usuário admin
 psql postgresql://offsetcalc:offsetcalc123@localhost:5432/offsetcalc \
   -f offsetcalc-api/src/db/migrations/001_initial_schema.sql
 ```
@@ -69,19 +86,26 @@ psql postgresql://offsetcalc:offsetcalc123@localhost:5432/offsetcalc \
 
 ```bash
 cd offsetcalc-api
-cp .env.example .env   # edite as variáveis
 npm install
-npm run dev            # porta 3000
+npm run dev            # ts-node-dev, porta 3000
 ```
 
 ### 3. Frontend
 
 ```bash
 cd offsetcalc-ui
-cp .env.example .env.local
 npm install
-npm run dev            # porta 5173
+npm run dev            # Vite, porta 5173
 ```
+
+## Variáveis de Ambiente (docker-compose)
+
+| Variável | Valor padrão | Descrição |
+|----------|-------------|-----------|
+| `DATABASE_URL` | `postgresql://offsetcalc:offsetcalc123@postgres:5432/offsetcalc` | Conexão PostgreSQL |
+| `JWT_SECRET` | `dev-jwt-secret-key-minimum-32-characters` | Segredo JWT (troque em prod) |
+| `REFRESH_TOKEN_SECRET` | `dev-refresh-secret-key-minimum-32-chars` | Segredo refresh (troque em prod) |
+| `CORS_ORIGINS` | `http://localhost:5173` | Origens CORS permitidas |
 
 ## Autenticação
 
@@ -91,8 +115,8 @@ curl -X POST http://localhost:3000/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"admin@mohr.com","password":"Admin@123"}'
 
-# Usar o token
-curl http://localhost:3000/api/v1/quotes \
+# Usar token
+curl http://localhost:3000/api/v1/config \
   -H "Authorization: Bearer <access_token>"
 ```
 
@@ -100,39 +124,33 @@ curl http://localhost:3000/api/v1/quotes \
 
 | Método | Endpoint | Descrição |
 |--------|----------|-----------|
-| POST | `/api/v1/auth/login` | Login → JWT |
-| POST | `/api/v1/auth/refresh` | Renovar token |
-| GET | `/api/v1/auth/me` | Perfil do usuário |
-| POST | `/api/v1/quotes/calculate` | Calcular (sem salvar) |
-| POST | `/api/v1/quotes` | Calcular e salvar |
-| GET | `/api/v1/quotes` | Listar orçamentos |
-| GET | `/api/v1/quotes/:id` | Detalhes |
-| PUT | `/api/v1/quotes/:id` | Atualizar status |
-| DELETE | `/api/v1/quotes/:id` | Arquivar |
+| GET | `/health` | Health check (db + uptime) |
+| POST | `/api/v1/auth/login` | Login → JWT + refresh token |
+| POST | `/api/v1/auth/refresh` | Renovar access token |
+| GET | `/api/v1/auth/me` | Perfil do usuário autenticado |
 | GET | `/api/v1/config` | Configuração do tenant |
-| PUT | `/api/v1/config` | Atualizar config (admin) |
+| PUT | `/api/v1/config` | Atualizar configuração (admin) |
 | GET | `/api/v1/clients` | Listar clientes |
 | POST | `/api/v1/clients` | Criar cliente |
+| GET | `/api/v1/quotes` | Listar orçamentos |
+| POST | `/api/v1/quotes` | Salvar orçamento |
+| PUT | `/api/v1/quotes/:id` | Atualizar status |
+| DELETE | `/api/v1/quotes/:id` | Remover orçamento |
 
-## Testes
+## Arquitetura de Dados
 
-```bash
-cd offsetcalc-api && npm test      # Jest + coverage
-cd offsetcalc-ui  && npm test      # Vitest + coverage
-```
+- **Cálculo**: 100% client-side via `calculator.ts` — sem latência de rede
+- **Config / Clientes / Histórico**: `localStorage` + React Context (AppContext)
+- **Sync API**: opcional — funciona offline, sincroniza quando disponível
+- **Multi-tenancy**: PostgreSQL RLS filtra por `tenant_id` automaticamente
 
-## Multi-Tenancy & Segurança
+## Segurança
 
-- **RLS (Row-Level Security)**: PostgreSQL filtra automaticamente por `tenant_id`
-- **JWT**: Tokens de 15 min + refresh de 7 dias
-- **RBAC**: admin, manager, user, viewer
+- **RLS**: Row-Level Security no PostgreSQL por tenant
+- **JWT**: Access token 15min + refresh 7 dias
+- **Helmet**: Headers de segurança HTTP
 - **Rate limiting**: 100 req/min por IP
-- **Helmet**: Headers de segurança
-- **CORS**: Origens configuráveis por `.env`
-
-## Variáveis de Ambiente
-
-Veja `.env.example` em cada subprojeto.
+- **CORS**: Origens configuráveis via env
 
 ---
 
