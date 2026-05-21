@@ -1,121 +1,253 @@
-import { useState, useEffect } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { useApp } from '../context/AppContext';
+import {
+  calcular, calcMelhoresFormatos,
+  CalculatorInput, CalculatorResult, AcabamentoParam, PapelVia, PRESETS,
+} from '../utils/calculator';
 
-interface Material {
-  tipo: string;
-  gramatura: string;
-  precoPorKg: number;
+type Secao = 'orcamento' | 'clientes' | 'config' | 'historico' | 'dashboard';
+
+interface Props {
+  onGoTo: (s: Secao) => void;
 }
 
-interface Maquina {
-  nome: string;
+const GRAFISMOS = [
+  { val: 0.2, label: 'Só texto' },
+  { val: 0.4, label: 'Retícula 40%' },
+  { val: 0.7, label: 'Retícula 70% (típico 4 cores)' },
+  { val: 1.0, label: 'Chapado / Cores sólidas' },
+  { val: 1.2, label: 'Chapado transparente' },
+];
+
+const CORES_OPTIONS = [
+  { val: 0, label: '0 cores' },
+  { val: 1, label: '1 cor (P&B)' },
+  { val: 2, label: '2 cores' },
+  { val: 3, label: '3 cores' },
+  { val: 4, label: '4 cores (CMYK)' },
+];
+
+const TIRAGENS_COMP = [500, 1000, 2000, 3000, 5000, 10000];
+
+function mkInput(
+  tipoAtivo: CalculatorInput['tipoAtivo'],
+  qty: number,
+  rest: Omit<CalculatorInput, 'tipoAtivo' | 'tiраgemInput'>
+): CalculatorInput {
+  return { tipoAtivo, tiраgemInput: qty, ...rest } as CalculatorInput;
 }
 
-interface QuoteResult {
-  subtotal: number;
-  margem: number;
-  total: number;
-  unitario: number;
-  num_chapas: number;
-  folhas_brutas: number;
-  consumo_tinta_kg: number;
-  horas_maquina: number;
-}
+export default function CalculoPage({ onGoTo }: Props) {
+  const { config, clientes, addOrcamento, toast } = useApp();
 
-export default function CalculoPage() {
+  // ── Identificação ────────────────────────────────────────────────────────
   const [jobRef, setJobRef] = useState('');
-  const [cliente, setCliente] = useState('');
-  const [jobData, setJobData] = useState('');
+  const [clienteNome, setClienteNome] = useState('');
+  const [clienteBusca, setClienteBusca] = useState('');
+  const [showCliBusca, setShowCliBusca] = useState(false);
+  const [jobData, setJobData] = useState(new Date().toISOString().slice(0, 10));
   const [prazo, setPrazo] = useState('');
-  const [tipoMaterial, setTipoMaterial] = useState('simples');
-  const [papel, setPapel] = useState('');
-  const [gramatura, setGramatura] = useState('');
-  const [largura, setLargura] = useState('');
-  const [altura, setAltura] = useState('');
-  const [tiragem, setTiragem] = useState('');
-  const [coresF, setCoresF] = useState('4');
-  const [coresV, setCoresV] = useState('0');
-  const [grafismo, setGrafismo] = useState('0.7');
-  const [margem, setMargem] = useState('30');
-  const [urgencia, setUrgencia] = useState('0');
-  const [maquina, setMaquina] = useState('');
-  const [resultado, setResultado] = useState<QuoteResult | null>(null);
-  const [materiais, setMateriais] = useState<Material[]>([]);
-  const [maquinas, setMaquinas] = useState<Maquina[]>([]);
+
+  // ── Tipo ──────────────────────────────────────────────────────────────────
+  const [tipoAtivo, setTipoAtivo] = useState<'simples' | 'bloco' | 'revista'>('simples');
+
+  // ── Papel ─────────────────────────────────────────────────────────────────
+  const [tipoPapel, setTipoPapel] = useState(() => config.papeis[0]?.tipo || '');
+  const [gramPapel, setGramPapel] = useState(() => config.papeis[0]?.gramatura || '');
+
+  // ── Dimensões ─────────────────────────────────────────────────────────────
+  const [w, setW] = useState(21);
+  const [h, setH] = useState(29.7);
+
+  // ── Formato impressão ─────────────────────────────────────────────────────
+  const [formatoNome, setFormatoNome] = useState('');
+
+  // ── Cores ─────────────────────────────────────────────────────────────────
+  const [coresF, setCoresF] = useState(4);
+  const [coresV, setCoresV] = useState(0);
+  const [tiraNRetiraEnabled, setTiraNRetiraEnabled] = useState(false);
+  const [grafismo, setGrafismo] = useState(0.7);
+
+  // ── Máquina e margens ─────────────────────────────────────────────────────
+  const [maquinaNome, setMaquinaNome] = useState(() => config.maquinas[0]?.nome || '');
+  const [margemPct, setMargemPct] = useState(30);
+  const [urgPct, setUrgPct] = useState(0);
+  const [refugoPct, setRefugoPct] = useState(5);
+
+  // ── Tiragem ───────────────────────────────────────────────────────────────
+  const [qty, setQty] = useState(1000);
+
+  // ── Bloco ─────────────────────────────────────────────────────────────────
+  const [blocoFolhas, setBlocoFolhas] = useState(50);
+  const [blocoVias, setBlocoVias] = useState(1);
+  const [blocoChapaModo, setBlocoChapaModo] = useState<'unica' | 'por-via'>('unica');
+  const [blocoPapeis, setBlocoPapeis] = useState<PapelVia[]>([
+    { id: 'capa', label: 'Contracapa', tipo: '', gram: '' },
+    { id: 'via-1', label: 'Via 1', tipo: '', gram: '' },
+  ]);
+
+  // ── Revista ───────────────────────────────────────────────────────────────
+  const [revPaginas, setRevPaginas] = useState(16);
+  const [revCapaPapel, setRevCapaPapel] = useState('');
+  const [revCapaGram, setRevCapaGram] = useState('');
+  const [revCapaCoresF, setRevCapaCoresF] = useState(4);
+  const [revCapaCoresV, setRevCapaCoresV] = useState(4);
+  const [revCapaAcabamentos] = useState<AcabamentoParam[]>([]);
+
+  // ── Acabamentos ───────────────────────────────────────────────────────────
+  const [acabSelecionados, setAcabSelecionados] = useState<AcabamentoParam[]>([]);
+  const [showAcabModal, setShowAcabModal] = useState(false);
+
+  // ── Resultado ─────────────────────────────────────────────────────────────
+  const [resultado, setResultado] = useState<CalculatorResult | null>(null);
+  const [showComp, setShowComp] = useState(false);
+  const [comparativo, setComparativo] = useState<{ tiragem: number; total: number; unitario: number }[]>([]);
+
+  // ── Derived ───────────────────────────────────────────────────────────────
+  const papeisTipos = useMemo(() => [...new Set(config.papeis.map(p => p.tipo))], [config.papeis]);
+
+  const gramaturasDisponiveis = useMemo(
+    () => config.papeis.filter(p => p.tipo === tipoPapel).map(p => p.gramatura),
+    [config.papeis, tipoPapel]
+  );
+
+  const maquinaSel = useMemo(
+    () => config.maquinas.find(m => m.nome === maquinaNome),
+    [config.maquinas, maquinaNome]
+  );
+
+  const formatosDisponiveis = useMemo(() => {
+    if (!w || !h || !maquinaSel) return [];
+    return calcMelhoresFormatos(w, h, maquinaSel.pinca || 1.2, tipoAtivo === 'revista', maquinaSel.formato);
+  }, [w, h, maquinaSel, tipoAtivo]);
 
   useEffect(() => {
-    carregarConfig();
-  }, []);
-
-  const carregarConfig = async () => {
-    try {
-      const token = localStorage.getItem('access_token');
-      const res = await fetch('http://localhost:3000/api/v1/config', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      const data = await res.json();
-      if (data.data) {
-        setMateriais(data.data.materials);
-        setMaquinas(data.data.machines);
+    if (formatosDisponiveis.length > 0) {
+      if (!formatosDisponiveis.find(f => f.nome === formatoNome)) {
+        setFormatoNome(formatosDisponiveis[0].nome);
       }
-    } catch (err) {
-      console.error('Erro ao carregar config:', err);
+    } else {
+      setFormatoNome('');
     }
+  }, [formatosDisponiveis]);
+
+  useEffect(() => {
+    if (gramaturasDisponiveis.length > 0 && !gramaturasDisponiveis.includes(gramPapel)) {
+      setGramPapel(gramaturasDisponiveis[0]);
+    }
+  }, [gramaturasDisponiveis]);
+
+  const formatoSel = formatosDisponiveis.find(f => f.nome === formatoNome);
+  const formatoPermiteTira = !!(
+    tipoAtivo === 'simples' && coresV > 0 &&
+    formatoSel && formatoSel.enc >= 2 && (formatoSel.colunas || 1) % 2 === 0
+  );
+
+  const clientesFiltrados = useMemo(() => {
+    if (!clienteBusca.trim()) return [];
+    const q = clienteBusca.toLowerCase();
+    return clientes.filter(c => c.nome.toLowerCase().includes(q)).slice(0, 6);
+  }, [clientes, clienteBusca]);
+
+  // ── Build input ───────────────────────────────────────────────────────────
+  const buildRest = (): Omit<CalculatorInput, 'tipoAtivo' | 'tiраgemInput'> => ({
+    blocoFolhas, blocoVias, blocoChapaModo, blocoPapeis,
+    revPaginas, revCapaPapel, revCapaGram, revCapaCoresF, revCapaCoresV, revCapaAcabamentos,
+    tipoPapel, gramPapel, w, h, formatoNome,
+    coresF, coresV, tiraNRetiraEnabled, grafismo,
+    maquinaNome, margemPct, urgPct, refugoPct,
+    acabSelecionados,
+  });
+
+  // ── Handlers ──────────────────────────────────────────────────────────────
+  const aplicarPreset = (p: { w: number; h: number; blocoF?: number; blocoV?: number; revPag?: number }) => {
+    setW(p.w); setH(p.h);
+    if (tipoAtivo === 'bloco' && p.blocoF) { setBlocoFolhas(p.blocoF); setBlocoVias(p.blocoV ?? 1); }
+    if (tipoAtivo === 'revista' && p.revPag) setRevPaginas(p.revPag);
   };
 
-  const calcular = async () => {
-    if (!largura || !altura || !tiragem || !maquina) {
-      alert('Preencha todos os campos obrigatórios');
-      return;
+  const handleCalcular = () => {
+    const res = calcular(mkInput(tipoAtivo, qty, buildRest()), config);
+    if (res.erro) { toast(res.erro); return; }
+    setResultado(res);
+    setShowComp(false);
+    setComparativo([]);
+  };
+
+  const handleLimpar = () => {
+    setJobRef(''); setClienteNome(''); setClienteBusca('');
+    setW(21); setH(29.7);
+    setCoresF(4); setCoresV(0); setTiraNRetiraEnabled(false);
+    setGrafismo(0.7); setMargemPct(30); setUrgPct(0); setRefugoPct(5); setQty(1000);
+    setAcabSelecionados([]);
+    setResultado(null); setShowComp(false); setComparativo([]);
+  };
+
+  const handleSalvar = () => {
+    if (!resultado) return;
+    const ref = jobRef || `ORC-${Date.now()}`;
+    addOrcamento({
+      ref,
+      cliente: clienteNome,
+      desc: `${tipoAtivo} · ${tipoPapel} ${gramPapel} · ${w}×${h}cm · ${qty.toLocaleString('pt-BR')} un.`,
+      data: jobData || new Date().toISOString().slice(0, 10),
+      prazo,
+      tipoAtivo, tipoPapel, gramPapel, w, h, coresF, coresV,
+      maquinaNome, formatoNome, margemPct, urgPct, refugoPct,
+      qty, grafismo, blocoFolhas, blocoVias,
+      total: resultado.total, unitario: resultado.unitario,
+      resultado: { ...resultado },
+    });
+    toast(`Orçamento ${ref} salvo!`);
+    onGoTo('historico');
+  };
+
+  const handleToggleComp = () => {
+    if (!showComp && resultado) {
+      const rest = buildRest();
+      const rows = TIRAGENS_COMP.map(t => {
+        const r = calcular(mkInput(tipoAtivo, t, rest), config);
+        if (r.erro) return null;
+        return { tiragem: t, total: r.total, unitario: r.unitario };
+      }).filter(Boolean) as { tiragem: number; total: number; unitario: number }[];
+      setComparativo(rows);
     }
+    setShowComp(v => !v);
+  };
 
-    try {
-      const token = localStorage.getItem('access_token');
-      const res = await fetch('http://localhost:3000/api/v1/quotes/calculate', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          product_type: tipoMaterial,
-          paper_type: papel,
-          paper_gramatura: gramatura,
-          width_cm: parseFloat(largura),
-          height_cm: parseFloat(altura),
-          quantity: parseInt(tiragem),
-          colors_front: parseInt(coresF),
-          colors_back: parseInt(coresV),
-          grafismo: parseFloat(grafismo),
-          margin_pct: parseInt(margem),
-          urgency_pct: parseInt(urgencia),
-          machine_name: maquina,
-          finishing_specs: []
-        })
-      });
+  const toggleAcab = (index: number) => {
+    setAcabSelecionados(prev => {
+      if (prev.find(a => a.index === index)) return prev.filter(a => a.index !== index);
+      const a = config.acabamentos[index];
+      const novo: AcabamentoParam = { index };
+      if (a.formula === 'laminacao' || a.formula === 'verniz_total') novo.lados = 1;
+      if (a.formula === 'verniz_local') novo.percArea = a.percArea ?? 30;
+      if (a.formula === 'corte_vinco') { novo.setup = a.setup ?? 80; novo.valorMil = a.valorMil ?? 100; novo.faca = 0; }
+      return [...prev, novo];
+    });
+  };
 
-      const data = await res.json();
-      if (data.data) {
-        setResultado(data.data);
+  const updateAcabParam = (index: number, field: keyof AcabamentoParam, value: number) => {
+    setAcabSelecionados(prev => prev.map(a => a.index === index ? { ...a, [field]: value } : a));
+  };
+
+  const updateBlocoPapel = (slotId: string, slotLabel: string, field: 'tipo' | 'gram', value: string) => {
+    setBlocoPapeis(prev => {
+      const exists = prev.find(p => p.id === slotId);
+      if (field === 'tipo') {
+        const nx: PapelVia = { id: slotId, label: slotLabel, tipo: value, gram: '' };
+        return exists ? prev.map(p => p.id === slotId ? nx : p) : [...prev, nx];
       }
-    } catch (err) {
-      console.error('Erro ao calcular:', err);
-    }
+      return exists
+        ? prev.map(p => p.id === slotId ? { ...p, gram: value } : p)
+        : [...prev, { id: slotId, label: slotLabel, tipo: '', gram: value }];
+    });
   };
 
-  const limpar = () => {
-    setJobRef('');
-    setCliente('');
-    setPapel('');
-    setGramatura('');
-    setLargura('');
-    setAltura('');
-    setTiragem('');
-    setCoresF('4');
-    setCoresV('0');
-    setMaquina('');
-    setResultado(null);
-  };
+  // ── Presets ───────────────────────────────────────────────────────────────
+  const presets = (PRESETS as Record<string, { label: string; w: number; h: number; blocoF?: number; blocoV?: number; revPag?: number }[]>)[tipoAtivo] ?? [];
 
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="section active">
       <h2 style={{ fontSize: '22px', fontWeight: 800, marginBottom: '20px' }}>
@@ -123,267 +255,553 @@ export default function CalculoPage() {
       </h2>
 
       <div className="section-grid">
-        {/* COLUNA 1 - Identificação */}
+
+        {/* ══ COLUNA 1 — Identificação ══════════════════════════════════════ */}
         <div>
           <div className="card">
-            <div className="card-title">Identificação do Job</div>
+            <div className="card-title">Identificação</div>
 
             <div className="field">
               <label>Número / Referência</label>
-              <input
-                type="text"
-                value={jobRef}
-                onChange={(e) => setJobRef(e.target.value)}
-                placeholder="ORC-2025-001"
-              />
+              <input type="text" value={jobRef} onChange={e => setJobRef(e.target.value)} placeholder="ORC-2025-001" />
             </div>
 
-            <div className="field">
+            <div className="field" style={{ position: 'relative' }}>
               <label>Cliente</label>
               <input
                 type="text"
-                value={cliente}
-                onChange={(e) => setCliente(e.target.value)}
-                placeholder="Digite o nome..."
+                value={clienteBusca !== '' ? clienteBusca : clienteNome}
+                onChange={e => { setClienteBusca(e.target.value); setClienteNome(''); setShowCliBusca(true); }}
+                onFocus={() => setShowCliBusca(true)}
+                onBlur={() => setTimeout(() => setShowCliBusca(false), 200)}
+                placeholder="Digite para buscar..."
               />
+              {showCliBusca && clientesFiltrados.length > 0 && (
+                <div style={{
+                  position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 100,
+                  background: 'var(--surface)', border: '1px solid var(--border)',
+                  borderRadius: '6px', boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
+                }}>
+                  {clientesFiltrados.map(c => (
+                    <div key={c.id}
+                      style={{ padding: '8px 12px', cursor: 'pointer', fontSize: '13px', borderBottom: '1px solid var(--border)' }}
+                      onMouseDown={() => { setClienteNome(c.nome); setClienteBusca(''); setShowCliBusca(false); }}>
+                      {c.nome}
+                      {c.tel && <span style={{ color: 'var(--text2)', fontSize: '11px', marginLeft: '6px' }}>· {c.tel}</span>}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="grid-2">
               <div className="field">
                 <label>Data</label>
-                <input
-                  type="date"
-                  value={jobData}
-                  onChange={(e) => setJobData(e.target.value)}
-                />
+                <input type="date" value={jobData} onChange={e => setJobData(e.target.value)} />
               </div>
               <div className="field">
-                <label>Prazo de Entrega</label>
-                <input
-                  type="date"
-                  value={prazo}
-                  onChange={(e) => setPrazo(e.target.value)}
-                />
+                <label>Prazo</label>
+                <input type="date" value={prazo} onChange={e => setPrazo(e.target.value)} />
               </div>
             </div>
 
             <div className="field">
               <label>Tipo de Material</label>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
-                {['simples', 'bloco', 'revista'].map((tipo) => (
-                  <button
-                    key={tipo}
-                    style={{
-                      padding: '10px 8px',
-                      background: tipoMaterial === tipo ? 'var(--accent)' : 'var(--surface2)',
-                      color: tipoMaterial === tipo ? '#fff' : 'var(--text)',
-                      border: 'none',
-                      borderRadius: '8px',
-                      cursor: 'pointer',
-                      fontWeight: 700,
-                      fontSize: '11px'
-                    }}
-                    onClick={() => setTipoMaterial(tipo)}
-                  >
-                    {tipo === 'simples' && '🖨 Simples'}
-                    {tipo === 'bloco' && '📋 Bloco'}
-                    {tipo === 'revista' && '📖 Revista'}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '6px' }}>
+                {(['simples', 'bloco', 'revista'] as const).map(tipo => (
+                  <button key={tipo}
+                    className={`btn ${tipoAtivo === tipo ? 'btn-primary' : 'btn-secondary'}`}
+                    style={{ padding: '8px 4px', fontSize: '11px', fontWeight: 700 }}
+                    onClick={() => setTipoAtivo(tipo)}>
+                    {tipo === 'simples' ? 'Simples' : tipo === 'bloco' ? 'Bloco' : 'Revista'}
                   </button>
                 ))}
               </div>
             </div>
+
+            {presets.length > 0 && (
+              <div className="field">
+                <label>Presets Rápidos</label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                  {presets.map(p => (
+                    <button key={p.label} className="preset-btn" onClick={() => aplicarPreset(p)}>
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
+
+          {/* Bloco params */}
+          {tipoAtivo === 'bloco' && (
+            <div className="card" style={{ marginTop: '12px' }}>
+              <div className="card-title">Configuração do Bloco</div>
+              <div className="grid-2">
+                <div className="field">
+                  <label>Folhas por Bloco</label>
+                  <input type="number" value={blocoFolhas} onChange={e => setBlocoFolhas(Math.max(1, +e.target.value))} min={1} />
+                </div>
+                <div className="field">
+                  <label>Nº de Vias</label>
+                  <select value={blocoVias} onChange={e => setBlocoVias(+e.target.value)}>
+                    {[1, 2, 3, 4].map(v => <option key={v} value={v}>{v} {v === 1 ? 'via' : 'vias'}</option>)}
+                  </select>
+                </div>
+              </div>
+              {blocoVias > 1 && (
+                <div className="field">
+                  <label>Modo de Chapas</label>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    {(['unica', 'por-via'] as const).map(m => (
+                      <button key={m}
+                        className={`btn ${blocoChapaModo === m ? 'btn-primary' : 'btn-secondary'}`}
+                        style={{ flex: 1, fontSize: '11px' }}
+                        onClick={() => setBlocoChapaModo(m)}>
+                        {m === 'unica' ? 'Chapa Única' : 'Por Via'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div className="field">
+                <label>Papéis</label>
+                {[
+                  { id: 'capa', label: blocoVias === 1 ? 'Contracapa' : 'Capa/Contracapa' },
+                  ...Array.from({ length: blocoVias }, (_, i) => ({ id: `via-${i + 1}`, label: `Via ${i + 1}` })),
+                ].map(slot => {
+                  const pv = blocoPapeis.find(p => p.id === slot.id) || { id: slot.id, label: slot.label, tipo: '', gram: '' };
+                  const gramsSlot = config.papeis.filter(p => p.tipo === pv.tipo).map(p => p.gramatura);
+                  return (
+                    <div key={slot.id} style={{ marginBottom: '8px' }}>
+                      <div style={{ fontSize: '11px', color: 'var(--text2)', marginBottom: '3px' }}>{slot.label}</div>
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <select style={{ flex: 2 }} value={pv.tipo}
+                          onChange={e => updateBlocoPapel(slot.id, slot.label, 'tipo', e.target.value)}>
+                          <option value="">— papel —</option>
+                          {papeisTipos.map(t => <option key={t} value={t}>{t}</option>)}
+                        </select>
+                        <select style={{ flex: 1 }} value={pv.gram}
+                          onChange={e => updateBlocoPapel(slot.id, slot.label, 'gram', e.target.value)}>
+                          <option value="">g</option>
+                          {gramsSlot.map(g => <option key={g} value={g}>{g}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Revista params */}
+          {tipoAtivo === 'revista' && (
+            <div className="card" style={{ marginTop: '12px' }}>
+              <div className="card-title">Parâmetros da Revista</div>
+              <div className="field">
+                <label>Número de Páginas</label>
+                <input type="number" value={revPaginas} onChange={e => setRevPaginas(Math.max(4, +e.target.value))} min={4} step={4} />
+                <div style={{ fontSize: '10px', color: 'var(--text2)', marginTop: '2px' }}>
+                  {Math.ceil(revPaginas / 4)} lâmina(s) de impressão
+                </div>
+              </div>
+              <div className="field">
+                <label>Papel da Capa</label>
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <select style={{ flex: 2 }} value={revCapaPapel}
+                    onChange={e => { setRevCapaPapel(e.target.value); setRevCapaGram(''); }}>
+                    <option value="">— papel capa —</option>
+                    {papeisTipos.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                  <select style={{ flex: 1 }} value={revCapaGram} onChange={e => setRevCapaGram(e.target.value)}>
+                    <option value="">g</option>
+                    {config.papeis.filter(p => p.tipo === revCapaPapel).map(p =>
+                      <option key={p.gramatura} value={p.gramatura}>{p.gramatura}</option>
+                    )}
+                  </select>
+                </div>
+              </div>
+              <div className="grid-2">
+                <div className="field">
+                  <label>Capa Frente</label>
+                  <select value={revCapaCoresF} onChange={e => setRevCapaCoresF(+e.target.value)}>
+                    {CORES_OPTIONS.map(o => <option key={o.val} value={o.val}>{o.label}</option>)}
+                  </select>
+                </div>
+                <div className="field">
+                  <label>Capa Verso</label>
+                  <select value={revCapaCoresV} onChange={e => setRevCapaCoresV(+e.target.value)}>
+                    {CORES_OPTIONS.map(o => <option key={o.val} value={o.val}>{o.label}</option>)}
+                  </select>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* COLUNA 2 - Especificações */}
+        {/* ══ COLUNA 2 — Especificações ══════════════════════════════════════ */}
         <div>
           <div className="card">
             <div className="card-title">Especificações de Impressão</div>
 
-            <div className="grid-2">
-              <div className="field">
-                <label>Tipo de Papel</label>
-                <select value={papel} onChange={(e) => setPapel(e.target.value)}>
-                  <option value="">— selecione —</option>
-                  {materiais.map((m: Material) => (
-                    <option key={m.tipo} value={m.tipo}>
-                      {m.tipo} ({m.gramatura})
+            {tipoAtivo !== 'bloco' && (
+              <div className="grid-2">
+                <div className="field">
+                  <label>{tipoAtivo === 'revista' ? 'Papel do Miolo' : 'Tipo de Papel'}</label>
+                  <select value={tipoPapel} onChange={e => { setTipoPapel(e.target.value); setGramPapel(''); }}>
+                    <option value="">— selecione —</option>
+                    {papeisTipos.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+                <div className="field">
+                  <label>Gramatura</label>
+                  <select value={gramPapel} onChange={e => setGramPapel(e.target.value)}>
+                    <option value="">—</option>
+                    {gramaturasDisponiveis.map(g => <option key={g} value={g}>{g}</option>)}
+                  </select>
+                </div>
+              </div>
+            )}
+
+            <div className="field">
+              <label>Formato Fechado (cm)</label>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <input type="number" value={w} onChange={e => setW(+e.target.value)} placeholder="Larg." step={0.1} style={{ flex: 1 }} />
+                <span style={{ color: 'var(--text2)' }}>×</span>
+                <input type="number" value={h} onChange={e => setH(+e.target.value)} placeholder="Alt." step={0.1} style={{ flex: 1 }} />
+                <span style={{ fontSize: '12px', color: 'var(--text2)' }}>cm</span>
+              </div>
+              {tipoAtivo === 'revista' && (
+                <div style={{ fontSize: '10px', color: 'var(--text2)', marginTop: '3px' }}>
+                  Informe a página fechada — a lâmina aberta será calculada automaticamente
+                </div>
+              )}
+            </div>
+
+            <div className="field">
+              <label>Formato de Impressão</label>
+              {formatosDisponiveis.length > 0 ? (
+                <select value={formatoNome} onChange={e => setFormatoNome(e.target.value)}>
+                  {formatosDisponiveis.map(f => (
+                    <option key={f.nome} value={f.nome}>
+                      M{f.enc} — {f.nome} ({f.w}×{f.h}cm) {f.aproveitamento.toFixed(0)}% apr.
                     </option>
                   ))}
                 </select>
-              </div>
-              <div className="field">
-                <label>Gramatura</label>
-                <input
-                  type="text"
-                  value={gramatura}
-                  onChange={(e) => setGramatura(e.target.value)}
-                  placeholder="115g"
-                />
-              </div>
-            </div>
-
-            <div className="grid-2">
-              <div className="field">
-                <label>Formato Final (cm)</label>
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                  <input
-                    type="number"
-                    value={largura}
-                    onChange={(e) => setLargura(e.target.value)}
-                    placeholder="Larg."
-                    step="0.1"
-                    style={{ flex: 1 }}
-                  />
-                  <span style={{ fontSize: '14px' }}>×</span>
-                  <input
-                    type="number"
-                    value={altura}
-                    onChange={(e) => setAltura(e.target.value)}
-                    placeholder="Alt."
-                    step="0.1"
-                    style={{ flex: 1 }}
-                  />
+              ) : (
+                <div style={{ padding: '10px', background: 'var(--surface2)', borderRadius: '6px', fontSize: '12px', color: '#ef4444' }}>
+                  Selecione máquina e dimensões válidas
                 </div>
-              </div>
-              <div className="field">
-                <label>Tiragem (unidades)</label>
-                <input
-                  type="number"
-                  value={tiragem}
-                  onChange={(e) => setTiragem(e.target.value)}
-                  placeholder="1000"
-                />
-              </div>
+              )}
+              {formatoSel && (
+                <div style={{ fontSize: '10px', color: 'var(--text2)', marginTop: '3px' }}>
+                  {formatoSel.enc} peças/folha · {formatoSel.orientacao} · sobra {formatoSel.sobra.toFixed(0)} cm²
+                </div>
+              )}
             </div>
 
             <div className="grid-2">
               <div className="field">
                 <label>Cores Frente</label>
-                <select value={coresF} onChange={(e) => setCoresF(e.target.value)}>
-                  <option value="0">0 cores</option>
-                  <option value="1">1 cor (P&B)</option>
-                  <option value="2">2 cores</option>
-                  <option value="3">3 cores</option>
-                  <option value="4">4 cores (CMYK)</option>
+                <select value={coresF} onChange={e => setCoresF(+e.target.value)}>
+                  {CORES_OPTIONS.map(o => <option key={o.val} value={o.val}>{o.label}</option>)}
                 </select>
               </div>
               <div className="field">
                 <label>Cores Verso</label>
-                <select value={coresV} onChange={(e) => setCoresV(e.target.value)}>
-                  <option value="0">0 cores</option>
-                  <option value="1">1 cor (P&B)</option>
-                  <option value="2">2 cores</option>
-                  <option value="3">3 cores</option>
-                  <option value="4">4 cores (CMYK)</option>
+                <select value={coresV} onChange={e => setCoresV(+e.target.value)}>
+                  {CORES_OPTIONS.map(o => <option key={o.val} value={o.val}>{o.label}</option>)}
                 </select>
               </div>
             </div>
 
+            {formatoPermiteTira && (
+              <div className="check-row">
+                <input type="checkbox" id="tiraNRetira"
+                  checked={tiraNRetiraEnabled} onChange={e => setTiraNRetiraEnabled(e.target.checked)} />
+                <label htmlFor="tiraNRetira">Tira e Retira (economiza chapas de verso)</label>
+              </div>
+            )}
+
             <div className="field">
               <label>Tipo de Grafismo</label>
-              <select value={grafismo} onChange={(e) => setGrafismo(e.target.value)}>
-                <option value="0.2">Só texto</option>
-                <option value="0.4">Retícula 40%</option>
-                <option value="0.7">Retícula 70% (típico 4 cores)</option>
-                <option value="1.0">Chapado / Cores sólidas</option>
-                <option value="1.2">Chapado transparente</option>
+              <select value={grafismo} onChange={e => setGrafismo(+e.target.value)}>
+                {GRAFISMOS.map(g => <option key={g.val} value={g.val}>{g.label}</option>)}
               </select>
+            </div>
+
+            <div className="field">
+              <label>
+                {tipoAtivo === 'bloco' ? 'Quantidade de Blocos' :
+                 tipoAtivo === 'revista' ? 'Nº de Exemplares' : 'Tiragem (unidades)'}
+              </label>
+              <input type="number" value={qty} onChange={e => setQty(Math.max(1, +e.target.value))} min={1} placeholder="1000" />
+            </div>
+
+            <div className="field">
+              <label>Acabamentos</label>
+              <button className="btn btn-secondary" style={{ width: '100%' }}
+                onClick={() => setShowAcabModal(true)}>
+                {acabSelecionados.length === 0
+                  ? '+ Selecionar Acabamentos'
+                  : `${acabSelecionados.length} acabamento(s) — clique para editar`}
+              </button>
+              {acabSelecionados.length > 0 && (
+                <div style={{ marginTop: '6px', fontSize: '11px', color: 'var(--text2)', lineHeight: '1.6' }}>
+                  {acabSelecionados.map(a => config.acabamentos[a.index]?.nome).join(' · ')}
+                </div>
+              )}
             </div>
           </div>
         </div>
 
-        {/* COLUNA 3 - Parâmetros e Resultados */}
+        {/* ══ COLUNA 3 — Parâmetros e Resultado ══════════════════════════════ */}
         <div>
           <div className="card">
             <div className="card-title">Parâmetros Operacionais</div>
 
+            <div className="field">
+              <label>Máquina</label>
+              <select value={maquinaNome} onChange={e => setMaquinaNome(e.target.value)}>
+                <option value="">— selecione —</option>
+                {config.maquinas.map(m => <option key={m.nome} value={m.nome}>{m.nome}</option>)}
+              </select>
+              {maquinaSel && (
+                <div style={{ fontSize: '10px', color: 'var(--text2)', marginTop: '3px' }}>
+                  {maquinaSel.formato} · {maquinaSel.velocidade.toLocaleString('pt-BR')} cph · R$ {maquinaSel.custoHora}/h
+                </div>
+              )}
+            </div>
+
             <div className="grid-2">
               <div className="field">
-                <label>Máquina</label>
-                <select value={maquina} onChange={(e) => setMaquina(e.target.value)}>
-                  <option value="">— selecione —</option>
-                  {maquinas.map((m: Maquina) => (
-                    <option key={m.nome} value={m.nome}>
-                      {m.nome}
-                    </option>
-                  ))}
-                </select>
+                <label>% Margem de Lucro</label>
+                <input type="number" value={margemPct} onChange={e => setMargemPct(+e.target.value)} min={0} max={500} />
               </div>
               <div className="field">
-                <label>% Margem de Lucro</label>
-                <input
-                  type="number"
-                  value={margem}
-                  onChange={(e) => setMargem(e.target.value)}
-                  min="0"
-                  max="300"
-                />
+                <label>% Urgência</label>
+                <input type="number" value={urgPct} onChange={e => setUrgPct(+e.target.value)} min={0} max={100} />
               </div>
             </div>
 
             <div className="field">
-              <label>% Urgência (adicional)</label>
-              <input
-                type="number"
-                value={urgencia}
-                onChange={(e) => setUrgencia(e.target.value)}
-                min="0"
-                max="100"
-              />
+              <label>% Refugo</label>
+              <input type="number" value={refugoPct} onChange={e => setRefugoPct(+e.target.value)} min={0} max={50} />
             </div>
 
-            <div style={{ display: 'flex', gap: '8px', marginTop: '20px' }}>
-              <button className="btn btn-primary" onClick={calcular}>
+            <div style={{ display: 'flex', gap: '8px', marginTop: '16px' }}>
+              <button className="btn btn-primary" style={{ flex: 2 }} onClick={handleCalcular}>
                 Calcular
               </button>
-              <button className="btn btn-secondary" onClick={limpar}>
+              <button className="btn btn-secondary" style={{ flex: 1 }} onClick={handleLimpar}>
                 Limpar
               </button>
             </div>
           </div>
 
-          {resultado && (
-            <div className="result-section">
-              <div className="result-title">Resultado do Orçamento</div>
+          {resultado && !resultado.erro && (
+            <>
+              <div className="result-section" style={{ marginTop: '12px' }}>
+                <div className="result-title">Resultado</div>
 
-              <div className="result-grid">
-                <div className="result-item">
-                  <div className="result-item-label">Subtotal</div>
-                  <div className="result-item-value">
-                    R$ {resultado.subtotal.toFixed(2)}
-                  </div>
-                </div>
-                <div className="result-item">
-                  <div className="result-item-label">Margem</div>
-                  <div className="result-item-value">
-                    R$ {resultado.margem.toFixed(2)}
-                  </div>
-                </div>
-                <div className="result-item">
-                  <div className="result-item-label">Total</div>
-                  <div className="result-item-value highlight">
+                {/* Total em destaque */}
+                <div style={{ textAlign: 'center', padding: '16px 0', borderBottom: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: '10px', color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total do Orçamento</div>
+                  <div style={{ fontSize: '32px', fontWeight: 800, color: 'var(--accent)', fontFamily: 'var(--mono)' }}>
                     R$ {resultado.total.toFixed(2)}
                   </div>
-                </div>
-                <div className="result-item">
-                  <div className="result-item-label">Unitário</div>
-                  <div className="result-item-value green">
-                    R$ {resultado.unitario.toFixed(4)}
+                  <div style={{ fontSize: '13px', color: 'var(--text2)' }}>
+                    {resultado.unitarioLabel}:{' '}
+                    <strong style={{ color: '#10b981', fontFamily: 'var(--mono)' }}>R$ {resultado.unitario.toFixed(4)}</strong>
                   </div>
+                  {resultado.urgPct > 0 && (
+                    <div style={{ fontSize: '11px', color: '#f59e0b', marginTop: '4px' }}>
+                      + {resultado.urgPct}% urgência = R$ {resultado.adUrgencia.toFixed(2)}
+                    </div>
+                  )}
+                </div>
+
+                {/* Breakdown de custos */}
+                <div style={{ padding: '12px 0' }}>
+                  <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>
+                    Composição de Custo
+                  </div>
+                  {([
+                    ['Papel', resultado.custoPapel],
+                    ['Chapas', resultado.custoChapas],
+                    ['Setup', resultado.custoSetup],
+                    ['Tinta', resultado.custoTinta],
+                    ['Máquina', resultado.custoMaquina],
+                    ['Custo Indireto', resultado.custoIndireto],
+                    ...(resultado.custoAcab > 0 ? [['Acabamentos', resultado.custoAcab]] : []),
+                  ] as [string, number][]).map(([label, val]) => (
+                    <div key={label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', padding: '3px 0', borderBottom: '1px solid var(--border)' }}>
+                      <span style={{ color: 'var(--text2)' }}>{label}</span>
+                      <span style={{ fontFamily: 'var(--mono)' }}>R$ {val.toFixed(2)}</span>
+                    </div>
+                  ))}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', padding: '6px 0', fontWeight: 700 }}>
+                    <span>Subtotal</span>
+                    <span style={{ fontFamily: 'var(--mono)' }}>R$ {resultado.subtotal.toFixed(2)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', padding: '2px 0', color: 'var(--accent)' }}>
+                    <span>Margem ({resultado.margemPct}%)</span>
+                    <span style={{ fontFamily: 'var(--mono)' }}>R$ {resultado.margem.toFixed(2)}</span>
+                  </div>
+                </div>
+
+                {/* Detalhes técnicos */}
+                <div style={{ padding: '10px 0', borderTop: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>
+                    Detalhes Técnicos
+                  </div>
+                  {resultado.jobLines.map((l, i) => (
+                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', padding: '2px 0', gap: '8px' }}>
+                      <span style={{ color: 'var(--text2)', flexShrink: 0 }}>{l.label}</span>
+                      <span style={{ fontFamily: 'var(--mono)', textAlign: 'right', fontSize: '10px' }}>{l.value}</span>
+                    </div>
+                  ))}
+                  {resultado.acabSel.length > 0 && (
+                    <div style={{ marginTop: '6px', fontSize: '10px', color: 'var(--text2)' }}>
+                      {resultado.acabSel.map(a => `${a.nome}: R$ ${a.val.toFixed(2)}`).join(' · ')}
+                    </div>
+                  )}
+                </div>
+
+                {/* Ações */}
+                <div style={{ display: 'flex', gap: '8px', paddingTop: '12px', borderTop: '1px solid var(--border)' }}>
+                  <button className="btn btn-primary" style={{ flex: 1 }} onClick={handleSalvar}>
+                    Salvar Orçamento
+                  </button>
+                  <button className="btn btn-secondary" onClick={handleToggleComp}>
+                    {showComp ? 'Fechar' : 'Tiragens'}
+                  </button>
                 </div>
               </div>
 
-              <div style={{ fontSize: '11px', color: 'var(--text2)', fontFamily: 'var(--mono)' }}>
-                <p><strong>Chapas:</strong> {resultado.num_chapas}</p>
-                <p><strong>Folhas:</strong> {resultado.folhas_brutas}</p>
-                <p><strong>Tinta:</strong> {resultado.consumo_tinta_kg.toFixed(3)} kg</p>
-                <p><strong>Máquina:</strong> {resultado.horas_maquina.toFixed(2)} horas</p>
-              </div>
-            </div>
+              {/* Comparativo de Tiragens */}
+              {showComp && comparativo.length > 0 && (
+                <div className="card" style={{ marginTop: '12px' }}>
+                  <div className="card-title">Comparativo de Tiragens</div>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '2px solid var(--border)' }}>
+                        <th style={{ padding: '6px 8px', textAlign: 'right', color: 'var(--text2)', fontWeight: 600 }}>Tiragem</th>
+                        <th style={{ padding: '6px 8px', textAlign: 'right', color: 'var(--text2)', fontWeight: 600 }}>Total</th>
+                        <th style={{ padding: '6px 8px', textAlign: 'right', color: 'var(--text2)', fontWeight: 600 }}>Unitário</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {comparativo.map(r => (
+                        <tr key={r.tiragem}
+                          style={{ borderBottom: '1px solid var(--border)', background: r.tiragem === qty ? 'rgba(124,58,237,0.08)' : undefined }}>
+                          <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: r.tiragem === qty ? 700 : 400 }}>
+                            {r.tiragem.toLocaleString('pt-BR')}
+                          </td>
+                          <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'var(--mono)' }}>
+                            R$ {r.total.toFixed(2)}
+                          </td>
+                          <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'var(--mono)', color: '#10b981' }}>
+                            R$ {r.unitario.toFixed(4)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
+
+      {/* ══ Modal de Acabamentos ════════════════════════════════════════════════ */}
+      {showAcabModal && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 1000,
+          background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px'
+        }}>
+          <div style={{
+            background: 'var(--surface)', borderRadius: '12px', padding: '24px',
+            width: '100%', maxWidth: '520px', maxHeight: '80vh', overflowY: 'auto'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <div style={{ fontSize: '16px', fontWeight: 700 }}>Selecionar Acabamentos</div>
+              <button className="btn btn-secondary" onClick={() => setShowAcabModal(false)}>Fechar</button>
+            </div>
+
+            {config.acabamentos.map((a, i) => {
+              const sel = acabSelecionados.find(s => s.index === i);
+              return (
+                <div key={i} style={{
+                  border: `1px solid ${sel ? 'var(--accent)' : 'var(--border)'}`,
+                  borderRadius: '8px', marginBottom: '8px', overflow: 'hidden'
+                }}>
+                  <div
+                    style={{
+                      cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '12px', padding: '12px',
+                      background: sel ? 'rgba(124,58,237,0.08)' : undefined
+                    }}
+                    onClick={() => toggleAcab(i)}>
+                    <input type="checkbox" checked={!!sel} onChange={() => {}} style={{ pointerEvents: 'none' }} />
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: '13px' }}>{a.nome}</div>
+                      <div style={{ fontSize: '11px', color: 'var(--text2)' }}>
+                        {a.formula === 'laminacao' && `R$ ${a.valorM2}/m² por lado`}
+                        {a.formula === 'verniz_total' && `R$ ${a.valorM2}/m²`}
+                        {a.formula === 'verniz_local' && `R$ ${a.valorM2}/m² · ${a.percArea ?? 30}% área padrão`}
+                        {a.formula === 'corte_vinco' && `Setup R$ ${a.setup ?? 80} + R$ ${a.valorMil ?? 100}/mil`}
+                        {a.formula === 'por_mil' && `R$ ${a.valorMil}/mil unidades`}
+                        {a.formula === 'fixo' && `R$ ${a.valor} fixo`}
+                      </div>
+                    </div>
+                  </div>
+
+                  {sel && (
+                    <div style={{ padding: '10px 12px', borderTop: '1px solid var(--border)', background: 'var(--surface2)', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                      {(a.formula === 'laminacao' || a.formula === 'verniz_total') && (
+                        <div className="field" style={{ margin: 0, minWidth: '120px' }}>
+                          <label style={{ fontSize: '10px' }}>Número de Lados</label>
+                          <select value={sel.lados ?? 1} onChange={e => updateAcabParam(i, 'lados', +e.target.value)}>
+                            <option value={1}>1 lado</option>
+                            <option value={2}>2 lados</option>
+                          </select>
+                        </div>
+                      )}
+                      {a.formula === 'verniz_local' && (
+                        <div className="field" style={{ margin: 0, minWidth: '120px' }}>
+                          <label style={{ fontSize: '10px' }}>% da Área</label>
+                          <input type="number" value={sel.percArea ?? a.percArea ?? 30}
+                            onChange={e => updateAcabParam(i, 'percArea', +e.target.value)} min={1} max={100} />
+                        </div>
+                      )}
+                      {a.formula === 'corte_vinco' && (
+                        <>
+                          <div className="field" style={{ margin: 0, minWidth: '100px' }}>
+                            <label style={{ fontSize: '10px' }}>Setup (R$)</label>
+                            <input type="number" value={sel.setup ?? a.setup ?? 80}
+                              onChange={e => updateAcabParam(i, 'setup', +e.target.value)} />
+                          </div>
+                          <div className="field" style={{ margin: 0, minWidth: '100px' }}>
+                            <label style={{ fontSize: '10px' }}>R$/mil</label>
+                            <input type="number" value={sel.valorMil ?? a.valorMil ?? 100}
+                              onChange={e => updateAcabParam(i, 'valorMil', +e.target.value)} />
+                          </div>
+                          <div className="field" style={{ margin: 0, minWidth: '100px' }}>
+                            <label style={{ fontSize: '10px' }}>Faca (R$)</label>
+                            <input type="number" value={sel.faca ?? 0}
+                              onChange={e => updateAcabParam(i, 'faca', +e.target.value)} min={0} />
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
