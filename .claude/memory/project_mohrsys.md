@@ -34,43 +34,41 @@ Sistema de orçamento para gráficas offset — plataforma SaaS multi-tenant ven
 - Persistência API: opcional/eventual, funciona offline
 
 ## Branch ativa de desenvolvimento
-- `feature/calculo-page-completa` (criada em 2026-05-20) — aguardando PR para main
-- PR #1 já mergeado (feature/ui-fidelity-complete → main)
+- Próxima branch: `feature/historico-op-pdf` ou `feature/dashboard-charts`
+- PRs mergeados: #1 (ui-fidelity), #2 (CalculoPage), #3 (ConfigPage) — todos na main
 - **Nunca commitar direto na main** — sempre via feature/ ou fix/
 
 ## Progresso de implementação (atualizado 2026-05-20)
 
-### ✅ Concluído (na main)
-1. **`src/utils/calculator.ts`** — Engine de cálculo portada do HTML para TypeScript puro
-   - `calcMelhoresFormatos()`, `calcular()`, `configDefault`, `PRESETS`
-   - Tipos: `CalculatorInput`, `CalculatorResult`, `AppConfig`, `AcabamentoParam`, `PapelVia`, etc.
-   - ATENÇÃO: propriedade `tiраgemInput` em CalculatorInput usa caracteres Cirílicos (р=U+0440, а=U+0430)
+### ✅ Concluído (na main — commit 9de4bfb)
+1. **`src/utils/calculator.ts`** — Engine de cálculo completa
+   - ATENÇÃO: propriedade `tiраgemInput` usa Cirílicos (р=U+0440, а=U+0430) — copiar bytes ao usar
 
-2. **`src/context/AppContext.tsx`** — Context global React (localStorage + sync API)
+2. **`src/context/AppContext.tsx`** — Context global (localStorage + sync API)
 
-3. **`src/App.tsx`** — Navegação 5 abas + logo SVG MOHR + prop `onGoTo: (s: Secao) => void`
+3. **`src/App.tsx`** — Navegação 5 abas + logo SVG MOHR
 
-4. **`src/index.css`** — CSS completo com variáveis, componentes, responsive
+4. **`src/index.css`** — CSS completo
 
-5. Backend API completo: auth, quotes, clients, config, dashboard (routes + services)
+5. Backend API completo (auth, quotes, clients, config, dashboard)
 
-### ✅ Concluído (branch feature/calculo-page-completa, aguardando PR)
-6. **`src/pages/CalculoPage.tsx`** — REESCRITA COMPLETA, cálculo 100% client-side
-   - 3 modos: Simples / Bloco (vias, chapas, papéis por slot) / Revista (páginas, capa)
-   - Presets por tipo via PRESETS do calculator.ts
-   - Formato de impressão dinâmico via calcMelhoresFormatos()
-   - Tira/Retira com detecção automática de elegibilidade
-   - Modal de acabamentos: laminação (lados), verniz local (%área), corte/vinco (setup/R$mil/faca)
-   - Breakdown completo de custos + detalhes técnicos (jobLines)
-   - Comparativo de tiragens on-demand (500/1k/2k/3k/5k/10k)
-   - Autocomplete de cliente do AppContext
-   - Salvar orçamento → addOrcamento() + redirect para histórico
+6. **`src/pages/CalculoPage.tsx`** — COMPLETA, cálculo 100% client-side
+   - 3 modos: Simples / Bloco / Revista
+   - Presets, formato dinâmico, tira/retira, modal acabamentos com parâmetros
+   - Comparativo 6 tiragens, autocomplete cliente, salvar → histórico
+
+7. **`src/pages/ConfigPage.tsx`** — COMPLETA, 5 abas, edição inline
+   - Papéis: CRUD, tabela editável inline
+   - Máquinas: CRUD (nome/formato/R$hora/velocidade/pinça)
+   - Acabamentos: CRUD com parâmetros dinâmicos por fórmula
+   - Chapas & Tintas: custo chapa, setup, CMYK/Pantone/UV
+   - Custos Indiretos: aluguel/energia/manutenção/outros → ciPorHora automático
+   - Banner "não salvo", modal confirmação reset, Restaurar Padrão
 
 ### 🔲 Pendente (próximas implementações)
-7. `src/pages/ConfigPage.tsx` — Falta: abas chapas/tintas/acabamentos/custos indiretos, edição in-line de papéis
-8. `src/pages/ClientesPage.tsx` — Falta: busca/autocomplete melhorado, botão "→ Orçamento"
-9. `src/pages/HistoricoPage.tsx` — Falta: OP (HTML nova janela), PDF/Proposta, editar, duplicar
-10. `src/pages/DashboardPage.tsx` — Falta: 4 gráficos Chart.js (barras, doughnut, horizontal, stacked)
+8. `src/pages/ClientesPage.tsx` — busca melhorada, botão "→ Orçamento"
+9. `src/pages/HistoricoPage.tsx` — OP (HTML nova janela), PDF/Proposta, editar, duplicar
+10. `src/pages/DashboardPage.tsx` — 4 gráficos Chart.js (barras, doughnut, horizontal, stacked)
 
 ## Módulos do HTML original que DEVEM estar no front (100% fiel)
 1. **Cálculo** — layout 3 colunas; tipos simples/bloco/revista; presets; formato-impressão dinâmico; tira/retira; modal de acabamentos com parâmetros; comparativo de tiragens; salvar orçamento
