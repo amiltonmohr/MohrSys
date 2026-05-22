@@ -255,8 +255,8 @@ export default function CalculoPage({ onGoTo }: Props) {
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="section active">
-      <h2 style={{ fontSize: '22px', fontWeight: 800, marginBottom: '20px' }}>
-        Novo <span style={{ color: 'var(--accent)' }}>Cálculo</span>
+      <h2 style={{ fontSize: '20px', fontWeight: 800, marginBottom: '16px' }}>
+        Novo <span className="grad-text">Cálculo</span>
       </h2>
 
       <div className="section-grid">
@@ -561,7 +561,7 @@ export default function CalculoPage({ onGoTo }: Props) {
         </div>
 
         {/* ══ COLUNA 3 — Parâmetros e Resultado ══════════════════════════════ */}
-        <div>
+        <div className="sticky-panel">
           <div className="card">
             <div className="card-title">Parâmetros Operacionais</div>
 
@@ -610,17 +610,19 @@ export default function CalculoPage({ onGoTo }: Props) {
                 <div className="result-title">Resultado</div>
 
                 {/* Total em destaque */}
-                <div style={{ textAlign: 'center', padding: '16px 0', borderBottom: '1px solid var(--border)' }}>
-                  <div style={{ fontSize: '10px', color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total do Orçamento</div>
-                  <div style={{ fontSize: '32px', fontWeight: 800, color: 'var(--accent)', fontFamily: 'var(--mono)' }}>
+                <div style={{ textAlign: 'center', padding: '20px 0 16px', borderBottom: '1px solid rgba(255,255,255,.08)' }}>
+                  <div style={{ fontSize: '10px', color: 'rgba(167,139,250,.7)', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '8px' }}>
+                    Total do Orçamento
+                  </div>
+                  <div className="grad-text" style={{ fontSize: '36px', fontWeight: 900, lineHeight: 1.1 }}>
                     R$ {resultado.total.toFixed(2)}
                   </div>
-                  <div style={{ fontSize: '13px', color: 'var(--text2)' }}>
+                  <div style={{ fontSize: '13px', color: 'rgba(255,255,255,.5)', marginTop: '8px' }}>
                     {resultado.unitarioLabel}:{' '}
-                    <strong style={{ color: '#10b981', fontFamily: 'var(--mono)' }}>R$ {resultado.unitario.toFixed(4)}</strong>
+                    <strong style={{ color: '#34d399' }}>R$ {resultado.unitario.toFixed(4)}</strong>
                   </div>
                   {resultado.urgPct > 0 && (
-                    <div style={{ fontSize: '11px', color: '#f59e0b', marginTop: '4px' }}>
+                    <div style={{ fontSize: '11px', color: '#fbbf24', marginTop: '4px' }}>
                       + {resultado.urgPct}% urgência = R$ {resultado.adUrgencia.toFixed(2)}
                     </div>
                   )}
