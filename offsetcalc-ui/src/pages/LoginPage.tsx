@@ -50,18 +50,26 @@ export default function LoginPage({ onLogin }: Props) {
     <div style={{
       minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
       background: 'var(--bg)', padding: '24px',
+      backgroundImage: 'radial-gradient(ellipse 80% 50% at 20% -10%, rgba(124,58,237,.25), transparent), radial-gradient(ellipse 60% 40% at 85% 90%, rgba(236,72,153,.15), transparent)',
     }}>
-      <div style={{ width: '100%', maxWidth: '380px' }}>
+      <div style={{ width: '100%', maxWidth: '400px' }}>
         {/* Logo */}
         <div style={{
-          background: 'var(--surface)', borderRadius: '16px', padding: '32px',
-          boxShadow: '0 8px 32px rgba(0,0,0,.25)', border: '1px solid var(--border)',
+          background: 'rgba(255,255,255,.06)', borderRadius: '20px', padding: '36px',
+          boxShadow: '0 8px 48px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.08), inset 0 1px 0 rgba(255,255,255,.06)',
+          border: '1px solid rgba(255,255,255,.08)',
+          backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)',
         }}>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '28px' }}>
-            <div style={{ background: '#1a1040', borderRadius: '10px', padding: '12px 20px', marginBottom: '12px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '32px' }}>
+            <div style={{
+              background: 'rgba(255,255,255,.04)',
+              borderRadius: '14px', padding: '14px 22px', marginBottom: '14px',
+              border: '1px solid rgba(255,255,255,.08)',
+              boxShadow: '0 4px 20px rgba(0,0,0,.4), 0 0 20px rgba(124,58,237,.15)',
+            }}>
               {LOGO_SVG}
             </div>
-            <div style={{ fontSize: '12px', color: 'var(--text2)', fontFamily: 'var(--mono)', letterSpacing: '1px' }}>
+            <div style={{ fontSize: '11px', color: 'rgba(167,139,250,.7)', letterSpacing: '1.5px', textTransform: 'uppercase' }}>
               Sistema de Orçamento Gráfico
             </div>
           </div>

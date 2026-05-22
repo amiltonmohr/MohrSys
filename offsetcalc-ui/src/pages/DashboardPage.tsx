@@ -5,7 +5,7 @@ import {
   PieChart, Pie, Cell, AreaChart, Area,
 } from 'recharts';
 
-const COLORS = ['#7c3aed', '#10b981', '#f59e0b', '#ef4444', '#06b6d4'];
+const COLORS = ['#7c3aed', '#ec4899', '#f59e0b', '#ef4444', '#a78bfa'];
 
 const STATUS_LABELS: Record<string, string> = {
   rascunho: 'Rascunho', enviado: 'Enviado', aceito: 'Aceito', recusado: 'Recusado',
@@ -106,7 +106,7 @@ export default function DashboardPage() {
           { label: 'Total de Orçamentos', value: kpis.total, color: 'var(--accent)' },
           { label: 'Aceitos', value: kpis.aceitos, color: '#10b981' },
           { label: 'Valor Aceito', value: fmtBRL(kpis.valorAceito), color: '#7c3aed' },
-          { label: 'Taxa de Conversão', value: `${kpis.taxa.toFixed(1)}%`, color: '#06b6d4' },
+          { label: 'Taxa de Conversão', value: `${kpis.taxa.toFixed(1)}%`, color: '#a78bfa' },
           { label: 'Últimos 30 dias', value: kpis.recentes30, color: '#f59e0b' },
           { label: 'Ticket Médio', value: fmtBRL(kpis.ticketMedio), color: '#ec4899' },
         ] as { label: string; value: string | number; color: string }[]).map(k => (

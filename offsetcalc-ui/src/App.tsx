@@ -53,7 +53,7 @@ function AppInner({ setLoggedIn }: { setLoggedIn: (v: boolean) => void }) {
               </button>
             ))}
           </div>
-          <button className="nav-tab" onClick={() => logout()} style={{ color: 'rgba(255,180,180,0.8)', flexShrink: 0 }}>
+          <button className="nav-tab" onClick={() => logout()} style={{ color: 'rgba(244,114,182,.8)', flexShrink: 0 }}>
             Sair
           </button>
         </div>
