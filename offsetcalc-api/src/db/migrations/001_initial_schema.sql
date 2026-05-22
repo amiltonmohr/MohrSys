@@ -236,12 +236,12 @@ INSERT INTO tenants (id, name, plan)
 VALUES ('f47ac10b-58cc-4372-a567-0e02b2c3d479', 'MOHR Print Shop', 'professional')
 ON CONFLICT DO NOTHING;
 
--- Password: Admin@123 (bcrypt hash)
+-- Password: Admin@123 (bcryptjs hash)
 INSERT INTO users (id, tenant_id, email, password_hash, first_name, last_name, role)
 VALUES (
   '550e8400-e29b-41d4-a716-446655440000',
   'f47ac10b-58cc-4372-a567-0e02b2c3d479',
   'admin@mohr.com',
-  '$2b$10$QcLO1EFMD.WUXM1uhHQ5UuewNo.gWJ7noIKexopQ2FnStbO.1.37S',
+  '$2a$10$SiiSibIIpTrXBAF4faUI2uQaXZ2sj1dawI7JliIRTNhb5BwEKqI0q',
   'Admin', 'MOHR', 'admin'
 ) ON CONFLICT DO NOTHING;

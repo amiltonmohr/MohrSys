@@ -67,8 +67,6 @@ services:
     build:
       context: ./offsetcalc-ui
       dockerfile: Dockerfile
-      args:
-        VITE_API_URL: /api/v1
     ports:
       - "5173:80"
     depends_on:

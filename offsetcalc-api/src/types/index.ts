@@ -137,6 +137,8 @@ export interface QuoteInput {
   // Tira/retira
   tira_retira?: boolean;
   comparison_quantities?: number[];
+  // Full frontend entry for lossless restore
+  raw_entry?: Record<string, unknown> | null;
 }
 
 export interface QuoteResult {
