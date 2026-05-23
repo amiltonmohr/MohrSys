@@ -1,5 +1,6 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useApp } from '../context/AppContext';
+import type { OrcamentoEntry } from '../context/AppContext';
 import {
   calcular, calcMelhoresFormatos,
   CalculatorInput, CalculatorResult, AcabamentoParam, PapelVia, PRESETS,
@@ -9,6 +10,8 @@ type Secao = 'orcamento' | 'clientes' | 'config' | 'historico' | 'dashboard';
 
 interface Props {
   onGoTo: (s: Secao) => void;
+  editEntry?: OrcamentoEntry | null;
+  onEditClear?: () => void;
 }
 
 const GRAFISMOS = [
@@ -37,8 +40,8 @@ function mkInput(
   return { tipoAtivo, tiраgemInput: qty, ...rest } as CalculatorInput;
 }
 
-export default function CalculoPage({ onGoTo }: Props) {
-  const { config, clientes, addOrcamento, toast } = useApp();
+export default function CalculoPage({ onGoTo, editEntry, onEditClear }: Props) {
+  const { config, clientes, addOrcamento, updateOrcamento, toast } = useApp();
 
   // ── Identificação ────────────────────────────────────────────────────────
   const [jobRef, setJobRef] = useState('');
@@ -103,6 +106,14 @@ export default function CalculoPage({ onGoTo }: Props) {
   const [showComp, setShowComp] = useState(false);
   const [comparativo, setComparativo] = useState<{ tiragem: number; total: number; unitario: number }[]>([]);
 
+  // ── Sprint 2 ──────────────────────────────────────────────────────────────
+  const [tiragensExtras, setTiragensExtras] = useState<number[]>([]);
+  const [novaTimagem, setNovaTiragem] = useState('');
+  const [desc, setDesc] = useState('');
+  const [descManual, setDescManual] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const editApplied = useRef<string | null>(null);
+
   // ── Derived ───────────────────────────────────────────────────────────────
   const papeisTipos = useMemo(() => [...new Set(config.papeis.map(p => p.tipo))], [config.papeis]);
 
@@ -142,6 +153,53 @@ export default function CalculoPage({ onGoTo }: Props) {
     if (sel) { setClienteNome(sel); localStorage.removeItem('mohrsys_goto_cliente'); }
   }, []);
 
+  // Restaura formulário quando um orçamento é aberto para edição
+  useEffect(() => {
+    if (!editEntry) return;
+    if (editApplied.current === editEntry.id) return;
+    editApplied.current = editEntry.id;
+
+    const e = editEntry;
+    setEditingId(e.id);
+    setJobRef((e.ref as string) || '');
+    setClienteNome((e.cliente as string) || '');
+    setJobData((e.data as string) || new Date().toISOString().slice(0, 10));
+    setPrazo((e.prazo as string) || '');
+    setDesc((e.desc as string) || '');
+    setDescManual(true);
+    setTipoAtivo((e.tipoAtivo as 'simples' | 'bloco' | 'revista') || 'simples');
+    setTipoPapel((e.tipoPapel as string) || '');
+    setGramPapel((e.gramPapel as string) || '');
+    setW((e.w as number) || 21);
+    setH((e.h as number) || 29.7);
+    setCoresF((e.coresF as number) ?? 4);
+    setCoresV((e.coresV as number) ?? 0);
+    setTiraNRetiraEnabled(!!(e.tiraNRetiraEnabled));
+    setGrafismo((e.grafismo as number) || 0.7);
+    setMaquinaNome((e.maquinaNome as string) || '');
+    setMargemPct((e.margemPct as number) ?? 30);
+    setUrgPct((e.urgPct as number) ?? 0);
+    setRefugoPct((e.refugoPct as number) ?? 5);
+    setQty((e.qty as number) || (e.tiragem as number) || 1000);
+    setBlocoFolhas((e.blocoFolhas as number) || 50);
+    setBlocoVias((e.blocoVias as number) || 1);
+    setBlocoChapaModo((e.blocoChapaModo as 'unica' | 'por-via') || 'unica');
+    if (Array.isArray(e.blocoPapeis)) setBlocoPapeis(e.blocoPapeis as PapelVia[]);
+    setRevPaginas((e.revPaginas as number) || 16);
+    setRevCapaPapel((e.revCapaPapel as string) || '');
+    setRevCapaGram((e.revCapaGram as string) || '');
+    setRevCapaCoresF((e.revCapaCoresF as number) ?? 4);
+    setRevCapaCoresV((e.revCapaCoresV as number) ?? 4);
+    if (Array.isArray(e.acabSelecionados)) setAcabSelecionados(e.acabSelecionados as AcabamentoParam[]);
+    if (Array.isArray(e.tiragensExtras)) setTiragensExtras(e.tiragensExtras as number[]);
+    if (e.formatoNome) setFormatoNome(e.formatoNome as string);
+    if (e.resultado) setResultado(e.resultado as CalculatorResult);
+    setShowComp(false);
+    setComparativo([]);
+    onEditClear?.();
+    toast(`Editando ${e.ref} — ajuste e salve para atualizar`);
+  }, [editEntry]);
+
   const formatoSel = formatosDisponiveis.find(f => f.nome === formatoNome);
   const formatoPermiteTira = !!(
     tipoAtivo === 'simples' && coresV > 0 &&
@@ -177,6 +235,20 @@ export default function CalculoPage({ onGoTo }: Props) {
     setResultado(res);
     setShowComp(false);
     setComparativo([]);
+    if (!descManual) {
+      const tipoLabel = tipoAtivo === 'bloco' ? 'Bloco' : tipoAtivo === 'revista' ? 'Revista' : 'Simples';
+      const acabNomes = acabSelecionados.map(a => config.acabamentos[a.index]?.nome).filter(Boolean);
+      const qtyLabel = tipoAtivo === 'bloco' ? `${qty} blocos` : tipoAtivo === 'revista' ? `${qty.toLocaleString('pt-BR')} ex.` : `${qty.toLocaleString('pt-BR')} un.`;
+      const autoDesc = [
+        tipoLabel,
+        tipoPapel && gramPapel ? `${tipoPapel} ${gramPapel}` : '',
+        `${w}×${h} cm`,
+        qtyLabel,
+        `${coresF}/${coresV} cores`,
+        ...acabNomes,
+      ].filter(Boolean).join(' · ');
+      setDesc(autoDesc);
+    }
   };
 
   const handleLimpar = () => {
@@ -186,31 +258,45 @@ export default function CalculoPage({ onGoTo }: Props) {
     setGrafismo(0.7); setMargemPct(30); setUrgPct(0); setRefugoPct(5); setQty(1000);
     setAcabSelecionados([]);
     setResultado(null); setShowComp(false); setComparativo([]);
+    setTiragensExtras([]); setNovaTiragem('');
+    setDesc(''); setDescManual(false);
+    setEditingId(null); editApplied.current = null;
   };
 
   const handleSalvar = () => {
     if (!resultado) return;
     const ref = jobRef || `ORC-${Date.now()}`;
-    addOrcamento({
+    const entry = {
       ref,
       cliente: clienteNome,
-      desc: `${tipoAtivo} · ${tipoPapel} ${gramPapel} · ${w}×${h}cm · ${qty.toLocaleString('pt-BR')} un.`,
+      desc: desc || `${tipoAtivo} · ${tipoPapel} ${gramPapel} · ${w}×${h}cm · ${qty.toLocaleString('pt-BR')} un.`,
       data: jobData || new Date().toISOString().slice(0, 10),
       prazo,
       tipoAtivo, tipoPapel, gramPapel, w, h, coresF, coresV,
+      tiraNRetiraEnabled, grafismo,
       maquinaNome, formatoNome, margemPct, urgPct, refugoPct,
-      qty, grafismo, blocoFolhas, blocoVias,
+      qty, blocoFolhas, blocoVias, blocoChapaModo, blocoPapeis,
+      revPaginas, revCapaPapel, revCapaGram, revCapaCoresF, revCapaCoresV,
+      acabSelecionados, tiragensExtras,
       total: resultado.total, unitario: resultado.unitario,
       resultado: { ...resultado },
-    });
-    toast(`Orçamento ${ref} salvo!`);
+    };
+    if (editingId) {
+      updateOrcamento(editingId, entry);
+      toast(`Orçamento ${ref} atualizado!`);
+      setEditingId(null); editApplied.current = null;
+    } else {
+      addOrcamento(entry);
+      toast(`Orçamento ${ref} salvo!`);
+    }
     onGoTo('historico');
   };
 
   const handleToggleComp = () => {
     if (!showComp && resultado) {
       const rest = buildRest();
-      const rows = TIRAGENS_COMP.map(t => {
+      const allTiragens = [...new Set([...TIRAGENS_COMP, ...tiragensExtras])].sort((a, b) => a - b);
+      const rows = allTiragens.map(t => {
         const r = calcular(mkInput(tipoAtivo, t, rest), config);
         if (r.erro) return null;
         return { tiragem: t, total: r.total, unitario: r.unitario };
@@ -219,6 +305,15 @@ export default function CalculoPage({ onGoTo }: Props) {
     }
     setShowComp(v => !v);
   };
+
+  const addTiragemExtra = () => {
+    const t = parseInt(novaTimagem);
+    if (!t || t <= 0) return;
+    setTiragensExtras(prev => prev.includes(t) ? prev : [...prev, t].sort((a, b) => a - b));
+    setNovaTiragem('');
+  };
+
+  const removeTiragemExtra = (t: number) => setTiragensExtras(prev => prev.filter(x => x !== t));
 
   const toggleAcab = (index: number) => {
     setAcabSelecionados(prev => {
@@ -541,6 +636,24 @@ export default function CalculoPage({ onGoTo }: Props) {
                  tipoAtivo === 'revista' ? 'Nº de Exemplares' : 'Tiragem (unidades)'}
               </label>
               <input type="number" value={qty} onChange={e => setQty(Math.max(1, +e.target.value))} min={1} placeholder="1000" />
+              <div style={{ marginTop: '6px', display: 'flex', gap: '4px', flexWrap: 'wrap', alignItems: 'center' }}>
+                {tiragensExtras.map(t => (
+                  <span key={t} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: 'rgba(6,182,212,.1)', border: '1px solid rgba(6,182,212,.3)', borderRadius: '4px', padding: '2px 7px', fontFamily: 'var(--mono)', fontSize: '11px', color: 'var(--accent2)' }}>
+                    {t.toLocaleString('pt-BR')} un.
+                    <span style={{ cursor: 'pointer', fontSize: '13px', opacity: .7 }} onClick={() => removeTiragemExtra(t)}>×</span>
+                  </span>
+                ))}
+                <div style={{ display: 'flex', gap: '4px', marginLeft: tiragensExtras.length > 0 ? '4px' : 0 }}>
+                  <input
+                    type="number" min={1} value={novaTimagem}
+                    onChange={e => setNovaTiragem(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && addTiragemExtra()}
+                    placeholder="+ comparar"
+                    style={{ width: '90px', fontSize: '11px', padding: '3px 6px' }}
+                  />
+                  <button className="btn btn-secondary" style={{ fontSize: '10px', padding: '3px 8px' }} onClick={addTiragemExtra}>+</button>
+                </div>
+              </div>
             </div>
 
             <div className="field">
@@ -687,15 +800,44 @@ export default function CalculoPage({ onGoTo }: Props) {
                   )}
                 </div>
 
+                {/* Descrição editável */}
+                <div style={{ padding: '10px 0', borderTop: '1px solid var(--border)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                    <label style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      Descrição do Orçamento
+                    </label>
+                    {descManual && (
+                      <button
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent2)', fontSize: '11px', fontFamily: 'var(--mono)', display: 'flex', alignItems: 'center', gap: '3px', padding: '2px 4px' }}
+                        onClick={() => { setDescManual(false); handleCalcular(); }}
+                        title="Voltar para descrição automática">
+                        ↺ auto
+                      </button>
+                    )}
+                  </div>
+                  <input
+                    type="text"
+                    value={desc}
+                    onChange={e => { setDesc(e.target.value); setDescManual(true); }}
+                    placeholder="Gerado automaticamente após calcular..."
+                    style={{ width: '100%', fontSize: '12px' }}
+                  />
+                </div>
+
                 {/* Ações */}
                 <div style={{ display: 'flex', gap: '8px', paddingTop: '12px', borderTop: '1px solid var(--border)' }}>
                   <button className="btn btn-primary" style={{ flex: 1 }} onClick={handleSalvar}>
-                    Salvar Orçamento
+                    {editingId ? 'Atualizar Orçamento' : 'Salvar Orçamento'}
                   </button>
                   <button className="btn btn-secondary" onClick={handleToggleComp}>
                     {showComp ? 'Fechar' : 'Tiragens'}
                   </button>
                 </div>
+                {editingId && (
+                  <div style={{ fontSize: '11px', color: '#f59e0b', textAlign: 'center', marginTop: '6px' }}>
+                    Modo edição — clique em "Limpar" para cancelar
+                  </div>
+                )}
               </div>
 
               {/* Comparativo de Tiragens */}

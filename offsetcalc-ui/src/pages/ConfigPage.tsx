@@ -19,7 +19,7 @@ const PAPEL_FORMATOS = ['66x96cm', '52x74cm', '36x52cm', '46x64cm', '48x66cm'];
 
 const emptyPapel = (): PapelConfig => ({ tipo: '', gramatura: '', formato: '66x96cm', precoPorKg: 12, fatorAbs: 1.0 });
 const emptyMaquina = (): MaquinaConfig => ({ nome: '', formato: '36x52cm', custoHora: 90, velocidade: 5000, pinca: 1.2 });
-const emptyAcab = (): AcabamentoConfig => ({ nome: '', formula: 'laminacao', valorM2: 1.80 });
+const emptyAcab = (): AcabamentoConfig => ({ nome: '', formula: 'laminacao', valorM2: 1.80, valorMinimo: 0 });
 const emptyFormato = (): FormatoConfig => ({ nome: '', w: 33, h: 48, div: '1/4', obs: '' });
 
 export default function ConfigPage() {
@@ -360,6 +360,7 @@ export default function ConfigPage() {
                     <th style={{ textAlign: 'right' }}>Setup</th>
                     <th style={{ textAlign: 'right' }}>%Área</th>
                     <th style={{ textAlign: 'right' }}>Valor Fixo</th>
+                    <th style={{ textAlign: 'right' }}>Mínimo (R$)</th>
                     <th style={{ width: '40px' }}></th>
                   </tr>
                 </thead>
@@ -408,6 +409,11 @@ export default function ConfigPage() {
                             onChange={e => updateAcab(i, { valor: parseFloat(e.target.value) || 0 })}
                             style={{ textAlign: 'right', width: '80px' }} />
                         ) : <span style={{ color: 'var(--text3)' }}>—</span>}
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        <input type="number" step="0.01" min="0" value={a.valorMinimo ?? 0}
+                          onChange={e => updateAcab(i, { valorMinimo: parseFloat(e.target.value) || 0 })}
+                          style={{ textAlign: 'right', width: '80px' }} />
                       </td>
                       <td>
                         <button className="btn-icon" onClick={() => removeAcab(i)}>✕</button>
@@ -468,6 +474,11 @@ export default function ConfigPage() {
                     onChange={e => setNewAcab(a => ({ ...a, valor: parseFloat(e.target.value) || 0 }))} />
                 </div>
               )}
+              <div className="field" style={{ margin: 0 }}>
+                <label>Mínimo (R$)</label>
+                <input type="number" step="0.01" min="0" value={newAcab.valorMinimo ?? 0}
+                  onChange={e => setNewAcab(a => ({ ...a, valorMinimo: parseFloat(e.target.value) || 0 }))} />
+              </div>
               <button className="btn btn-primary" onClick={addAcab} style={{ alignSelf: 'flex-end', marginBottom: '1px' }}>
                 + Adicionar
               </button>
