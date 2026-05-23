@@ -27,6 +27,14 @@ export interface AcabamentoConfig {
   percArea?: number;
 }
 
+export interface FormatoConfig {
+  nome: string;
+  w: number;
+  h: number;
+  div: string;
+  obs?: string;
+}
+
 export interface AppConfig {
   papeis: PapelConfig[];
   chapaCusto: number;
@@ -39,6 +47,8 @@ export interface AppConfig {
   tintaUvSg: number;
   maquinas: MaquinaConfig[];
   acabamentos: AcabamentoConfig[];
+  formatos: FormatoConfig[];
+  imposto: number;
   ciAluguel: number;
   ciEnergia: number;
   ciManutencao: number;
@@ -227,13 +237,15 @@ function calcEncaixe(fw: number, fh: number, pw: number, ph: number, pinca: numb
 }
 
 export function calcMelhoresFormatos(
-  pw: number, ph: number, pinca = 1.2, aberto = false, maqFormatoStr = '36x52cm'
+  pw: number, ph: number, pinca = 1.2, aberto = false, maqFormatoStr = '36x52cm',
+  customFormatos?: FormatoConfig[]
 ): FormatoResult[] {
+  const formatosSrc = (customFormatos && customFormatos.length > 0) ? customFormatos : FORMATOS_PADRAO;
   const maqParts = maqFormatoStr.toLowerCase().replace('cm', '').split('x').map(s => parseFloat(s.trim()));
   const maqW = maqParts[0] || 36, maqH = maqParts[1] || 52;
   let pw2 = pw, ph2 = ph;
   if (aberto) { pw2 = Math.max(pw, ph); ph2 = Math.min(pw, ph) * 2; }
-  return FORMATOS_PADRAO
+  return formatosSrc
     .filter(f => (f.w <= maqW && f.h <= maqH) || (f.h <= maqW && f.w <= maqH))
     .map(f => {
       const { enc, orientacao, colunas } = calcEncaixe(f.w, f.h, pw2, ph2, pinca);
@@ -288,7 +300,7 @@ export function calcular(input: CalculatorInput, cfg: AppConfig): CalculatorResu
   const isAberto = revistaAtivo;
 
   // Formatos disponíveis
-  const formatosDisponiveis = calcMelhoresFormatos(w, h, pinca, isAberto, maquina.formato);
+  const formatosDisponiveis = calcMelhoresFormatos(w, h, pinca, isAberto, maquina.formato, cfg.formatos);
   const formatoSel = formatosDisponiveis.find(f => f.nome === formatoNome) || formatosDisponiveis[0];
   if (!formatoSel) return { erro: 'Nenhum formato compatível' } as CalculatorResult;
 
@@ -611,6 +623,23 @@ export const configDefault: AppConfig = {
     { nome: 'Blocagem',             formula: 'por_mil',     valorMil: 50 },
     { nome: 'Relevo Seco',          formula: 'fixo',         valor: 350 },
   ],
+  formatos: [
+    { nome: 'Inteiro',    w: 66,   h: 96,   div: '1',    obs: 'folha inteira' },
+    { nome: 'Formato 2',  w: 66,   h: 48,   div: '1/2',  obs: 'corte ao meio na altura' },
+    { nome: 'Formato 2B', w: 33,   h: 96,   div: '1/2',  obs: 'corte ao meio na largura' },
+    { nome: 'Formato 3',  w: 66,   h: 32,   div: '1/3',  obs: 'corte ao terço na altura' },
+    { nome: 'Formato 3B', w: 22,   h: 96,   div: '1/3',  obs: 'corte ao terço na largura' },
+    { nome: 'Formato 4',  w: 33,   h: 48,   div: '1/4',  obs: 'meio × meio' },
+    { nome: 'Formato 6',  w: 33,   h: 32,   div: '1/6',  obs: 'meio × terço' },
+    { nome: 'Formato 6B', w: 22,   h: 48,   div: '1/6',  obs: 'terço × meio' },
+    { nome: 'Formato 8',  w: 33,   h: 24,   div: '1/8',  obs: 'meio × quarto' },
+    { nome: 'Formato 9',  w: 32,   h: 22,   div: '1/9',  obs: 'terço × terço' },
+    { nome: 'Formato 12', w: 22,   h: 24,   div: '1/12', obs: 'terço × quarto' },
+    { nome: 'Formato 16', w: 24,   h: 16.5, div: '1/16', obs: 'quarto × quarto' },
+    { nome: 'Formato 18', w: 22,   h: 16,   div: '1/18', obs: 'terço × sexto' },
+    { nome: 'Formato 32', w: 16.5, h: 12,   div: '1/32', obs: 'quarto × oitavo' },
+  ],
+  imposto: 10,
   ciAluguel: 4500, ciEnergia: 2800, ciManutencao: 1200, ciOutros: 800, ciHoras: 176, ciPorHora: 52.84,
 };
 

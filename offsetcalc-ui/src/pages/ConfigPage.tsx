@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import {
-  AppConfig, PapelConfig, MaquinaConfig, AcabamentoConfig,
+  AppConfig, PapelConfig, MaquinaConfig, AcabamentoConfig, FormatoConfig,
 } from '../utils/calculator';
 
-type Tab = 'papeis' | 'maquinas' | 'acabamentos' | 'chapas' | 'ci';
+type Tab = 'papeis' | 'maquinas' | 'acabamentos' | 'chapas' | 'ci' | 'formatos';
 
 const FORMULAS = [
   { val: 'laminacao',   label: 'Laminação' },
@@ -20,6 +20,7 @@ const PAPEL_FORMATOS = ['66x96cm', '52x74cm', '36x52cm', '46x64cm', '48x66cm'];
 const emptyPapel = (): PapelConfig => ({ tipo: '', gramatura: '', formato: '66x96cm', precoPorKg: 12, fatorAbs: 1.0 });
 const emptyMaquina = (): MaquinaConfig => ({ nome: '', formato: '36x52cm', custoHora: 90, velocidade: 5000, pinca: 1.2 });
 const emptyAcab = (): AcabamentoConfig => ({ nome: '', formula: 'laminacao', valorM2: 1.80 });
+const emptyFormato = (): FormatoConfig => ({ nome: '', w: 33, h: 48, div: '1/4', obs: '' });
 
 export default function ConfigPage() {
   const { config, salvarConfig, resetConfig } = useApp();
@@ -35,6 +36,8 @@ export default function ConfigPage() {
   const [newMaq, setNewMaq] = useState<MaquinaConfig>(emptyMaquina());
   // Novo acabamento form
   const [newAcab, setNewAcab] = useState<AcabamentoConfig>(emptyAcab());
+  // Novo formato form
+  const [newFormato, setNewFormato] = useState<FormatoConfig>(emptyFormato());
 
   useEffect(() => { setDraft({ ...config }); setDirty(false); }, [config]);
 
@@ -98,6 +101,18 @@ export default function ConfigPage() {
     setNewAcab(emptyAcab());
   };
 
+  // ── Formatos ──────────────────────────────────────────────────────────────
+  const updateFormato = (i: number, patch: Partial<FormatoConfig>) => {
+    const formatos = (draft.formatos || []).map((f, idx) => idx === i ? { ...f, ...patch } : f);
+    update({ formatos });
+  };
+  const removeFormato = (i: number) => update({ formatos: (draft.formatos || []).filter((_, idx) => idx !== i) });
+  const addFormato = () => {
+    if (!newFormato.nome) return;
+    update({ formatos: [...(draft.formatos || []), { ...newFormato }] });
+    setNewFormato(emptyFormato());
+  };
+
   // ── CI derivado ───────────────────────────────────────────────────────────
   const ciTotal = (draft.ciAluguel || 0) + (draft.ciEnergia || 0) + (draft.ciManutencao || 0) + (draft.ciOutros || 0);
 
@@ -107,6 +122,7 @@ export default function ConfigPage() {
     { id: 'acabamentos', label: 'Acabamentos'     },
     { id: 'chapas',    label: 'Chapas & Tintas'   },
     { id: 'ci',        label: 'Custos Indiretos'  },
+    { id: 'formatos',  label: 'Formatos'          },
   ];
 
   return (
@@ -485,6 +501,18 @@ export default function ConfigPage() {
           </div>
 
           <div className="card">
+            <div className="card-title">Impostos</div>
+            <div className="field">
+              <label>Alíquota de Imposto (%)</label>
+              <input type="number" step="0.1" min="0" max="100" value={draft.imposto ?? 10}
+                onChange={e => update({ imposto: parseFloat(e.target.value) || 0 })} />
+              <div style={{ fontSize: '10px', color: 'var(--text2)', marginTop: '3px' }}>
+                Exibido como linha separada no resultado do orçamento. Use 0 para omitir.
+              </div>
+            </div>
+          </div>
+
+          <div className="card">
             <div className="card-title">Tinta CMYK</div>
             <div className="grid-2">
               <div className="field">
@@ -590,6 +618,109 @@ export default function ConfigPage() {
 
             <div style={{ marginTop: '16px', fontSize: '11px', color: 'var(--text2)', lineHeight: '1.6', padding: '10px', background: 'var(--surface2)', borderRadius: '6px' }}>
               Esta taxa é aplicada a cada hora de máquina cobrada no orçamento como custo de estrutura da empresa.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══ TAB: FORMATOS ════════════════════════════════════════════════════ */}
+      {tab === 'formatos' && (
+        <div>
+          <div className="info-badge" style={{ marginBottom: '12px' }}>
+            Estes são os formatos de impressão disponíveis na folha 66×96cm. O cálculo usa apenas os formatos cabíveis na máquina selecionada.
+          </div>
+          <div className="card">
+            <div className="card-title">Formatos de Impressão ({(draft.formatos || []).length})</div>
+            <div style={{ overflowX: 'auto' }}>
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Nome</th>
+                    <th style={{ textAlign: 'right' }}>Larg. (cm)</th>
+                    <th style={{ textAlign: 'right' }}>Alt. (cm)</th>
+                    <th>Divisão</th>
+                    <th>Observação</th>
+                    <th style={{ textAlign: 'right' }}>Peças/folha</th>
+                    <th style={{ width: '40px' }}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(draft.formatos || []).map((f, i) => {
+                    const pecas = Math.round((66 * 96) / (f.w * f.h));
+                    return (
+                      <tr key={i}>
+                        <td>
+                          <input value={f.nome} onChange={e => updateFormato(i, { nome: e.target.value })} />
+                        </td>
+                        <td style={{ textAlign: 'right' }}>
+                          <input type="number" step="0.1" min="1" value={f.w}
+                            onChange={e => updateFormato(i, { w: parseFloat(e.target.value) || 1 })}
+                            style={{ textAlign: 'right', width: '70px' }} />
+                        </td>
+                        <td style={{ textAlign: 'right' }}>
+                          <input type="number" step="0.1" min="1" value={f.h}
+                            onChange={e => updateFormato(i, { h: parseFloat(e.target.value) || 1 })}
+                            style={{ textAlign: 'right', width: '70px' }} />
+                        </td>
+                        <td>
+                          <input value={f.div || ''} onChange={e => updateFormato(i, { div: e.target.value })}
+                            placeholder="ex: 1/4" style={{ width: '60px' }} />
+                        </td>
+                        <td>
+                          <input value={f.obs || ''} onChange={e => updateFormato(i, { obs: e.target.value })}
+                            placeholder="Descrição" />
+                        </td>
+                        <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: '11px', color: 'var(--text3)', whiteSpace: 'nowrap' }}>
+                          {pecas}×
+                        </td>
+                        <td>
+                          <button className="btn-icon" onClick={() => removeFormato(i)} title="Remover">✕</button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="card-title">Adicionar Formato</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '12px', alignItems: 'end' }}>
+              <div className="field" style={{ margin: 0 }}>
+                <label>Nome</label>
+                <input value={newFormato.nome} onChange={e => setNewFormato(f => ({ ...f, nome: e.target.value }))}
+                  placeholder="ex: Formato 4" />
+              </div>
+              <div className="field" style={{ margin: 0 }}>
+                <label>Larg. (cm)</label>
+                <input type="number" step="0.1" min="1" value={newFormato.w}
+                  onChange={e => setNewFormato(f => ({ ...f, w: parseFloat(e.target.value) || 1 }))} />
+              </div>
+              <div className="field" style={{ margin: 0 }}>
+                <label>Alt. (cm)</label>
+                <input type="number" step="0.1" min="1" value={newFormato.h}
+                  onChange={e => setNewFormato(f => ({ ...f, h: parseFloat(e.target.value) || 1 }))} />
+              </div>
+              <div className="field" style={{ margin: 0 }}>
+                <label>Divisão</label>
+                <input value={newFormato.div} onChange={e => setNewFormato(f => ({ ...f, div: e.target.value }))}
+                  placeholder="1/4" style={{ width: '70px' }} />
+              </div>
+              <div className="field" style={{ margin: 0 }}>
+                <label>Observação</label>
+                <input value={newFormato.obs || ''} onChange={e => setNewFormato(f => ({ ...f, obs: e.target.value }))}
+                  placeholder="Descrição opcional" />
+              </div>
+              <div className="field" style={{ margin: 0 }}>
+                <label style={{ color: 'var(--text3)' }}>Peças/folha</label>
+                <div style={{ padding: '8px 10px', background: 'var(--surface2)', borderRadius: '6px', fontFamily: 'var(--mono)', fontSize: '13px', color: 'var(--accent2)' }}>
+                  {newFormato.w > 0 && newFormato.h > 0 ? Math.round((66 * 96) / (newFormato.w * newFormato.h)) : '—'}×
+                </div>
+              </div>
+              <button className="btn btn-primary" onClick={addFormato} style={{ alignSelf: 'flex-end', marginBottom: '1px' }}>
+                + Adicionar
+              </button>
             </div>
           </div>
         </div>

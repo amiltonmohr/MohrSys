@@ -118,7 +118,7 @@ export default function CalculoPage({ onGoTo }: Props) {
 
   const formatosDisponiveis = useMemo(() => {
     if (!w || !h || !maquinaSel) return [];
-    return calcMelhoresFormatos(w, h, maquinaSel.pinca || 1.2, tipoAtivo === 'revista', maquinaSel.formato);
+    return calcMelhoresFormatos(w, h, maquinaSel.pinca || 1.2, tipoAtivo === 'revista', maquinaSel.formato, config.formatos);
   }, [w, h, maquinaSel, tipoAtivo]);
 
   useEffect(() => {
@@ -655,6 +655,18 @@ export default function CalculoPage({ onGoTo }: Props) {
                     <span>Margem ({resultado.margemPct}%)</span>
                     <span style={{ fontFamily: 'var(--mono)' }}>R$ {resultado.margem.toFixed(2)}</span>
                   </div>
+                  {(config.imposto ?? 0) > 0 && (
+                    <>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', padding: '2px 0', color: '#fbbf24' }}>
+                        <span>Impostos ({config.imposto}%)</span>
+                        <span style={{ fontFamily: 'var(--mono)' }}>R$ {(resultado.total * config.imposto / 100).toFixed(2)}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', padding: '6px 0', fontWeight: 800, borderTop: '2px solid var(--border)', color: '#f59e0b' }}>
+                        <span>Total com Impostos</span>
+                        <span style={{ fontFamily: 'var(--mono)' }}>R$ {(resultado.total * (1 + config.imposto / 100)).toFixed(2)}</span>
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 {/* Detalhes técnicos */}
