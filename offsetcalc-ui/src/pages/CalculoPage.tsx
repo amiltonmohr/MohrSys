@@ -281,15 +281,91 @@ export default function CalculoPage({ onGoTo, editEntry, onEditClear }: Props) {
       total: resultado.total, unitario: resultado.unitario,
       resultado: { ...resultado },
     };
+    // inclui margem/subtotal diretamente para acesso rápido no dashboard
+    const entryFull = {
+      ...entry,
+      margem: resultado.margem,
+      subtotal: resultado.subtotal,
+    };
     if (editingId) {
-      updateOrcamento(editingId, entry);
+      updateOrcamento(editingId, entryFull);
       toast(`Orçamento ${ref} atualizado!`);
       setEditingId(null); editApplied.current = null;
     } else {
-      addOrcamento(entry);
+      addOrcamento(entryFull);
       toast(`Orçamento ${ref} salvo!`);
     }
     onGoTo('historico');
+  };
+
+  const handleGerarProposta = () => {
+    if (!resultado) return;
+    const ref = jobRef || 'RASCUNHO';
+    const tiragensComp = tiragensExtras.length > 0
+      ? (() => {
+          const rest = buildRest();
+          return [...new Set([qty, ...tiragensExtras])].sort((a, b) => a - b)
+            .map(t => {
+              const r = calcular(mkInput(tipoAtivo, t, rest), config);
+              if (r.erro) return null;
+              return { tiраgemInput: t, total: r.total, unitario: r.unitario, subtotal: r.subtotal };
+            }).filter(Boolean);
+        })()
+      : [{ tiраgemInput: qty, total: resultado.total, unitario: resultado.unitario, subtotal: resultado.subtotal }];
+
+    const entry = {
+      id: 'preview', ref, cliente: clienteNome,
+      desc: desc || `${tipoAtivo} · ${tipoPapel} ${gramPapel} · ${w}×${h}cm · ${qty.toLocaleString('pt-BR')} un.`,
+      data: jobData, prazo, ts: Date.now(), aprovado: false,
+      total: resultado.total, unitario: resultado.unitario,
+      tiragensComparativo: tiragensComp,
+      resultado: { ...resultado },
+    };
+    const cli = clientes.find(c => c.nome === clienteNome);
+
+    // importa e usa a mesma função de geração da proposta
+    const brl = (v: unknown, dec = 2) => typeof v === 'number' ? `R$ ${v.toFixed(dec).replace('.', ',')}` : '—';
+    const now = new Date().toLocaleDateString('pt-BR');
+    const validade = new Date(Date.now() + 30 * 24 * 3600 * 1000).toLocaleDateString('pt-BR');
+    const comp = tiragensComp as { tiраgemInput?: number; total: number; unitario: number }[];
+    const blocoAtivo = tipoAtivo === 'bloco';
+    const revistaAtivo = tipoAtivo === 'revista';
+    const qtyLabel = blocoAtivo ? 'blocos' : revistaAtivo ? 'exemplares' : 'unidades';
+    const unitLbl = blocoAtivo ? 'por Bloco' : revistaAtivo ? 'por Exemplar' : 'Unitário';
+    const jobLines = resultado.jobLines || [];
+    const jobRowsHTML = jobLines.filter((l: {label:string;value:string}) => !l.label.toLowerCase().includes('custo'))
+      .map((l: {label:string;value:string}) => `<tr><td style="color:#6b5f8a;width:42%">${l.label}</td><td><strong>${l.value}</strong></td></tr>`).join('');
+
+    let qtySection = '';
+    if (comp.length > 1) {
+      const bestUnit = Math.min(...comp.map(r => r.unitario || Infinity));
+      const rows = comp.map(r => {
+        const best = Math.abs((r.unitario || 0) - bestUnit) < 0.0001;
+        return `<tr${best ? ' class="best"' : ''}><td>${(r.tiраgemInput || 0).toLocaleString('pt-BR')} ${qtyLabel}</td><td class="num">${brl(r.total)}</td><td class="num best-unit">${brl(r.unitario, 4)}${best ? ' ✓' : ''}</td></tr>`;
+      }).join('');
+      qtySection = `<h2>Opções de Quantidade</h2><table><thead><tr><th style="text-align:left;padding:6px 8px;border-bottom:2px solid #7c3aed;font-size:11px;color:#6b5f8a">Quantidade</th><th style="text-align:right;padding:6px 8px;border-bottom:2px solid #7c3aed;font-size:11px;color:#6b5f8a">Preço Total</th><th style="text-align:right;padding:6px 8px;border-bottom:2px solid #7c3aed;font-size:11px;color:#6b5f8a">Valor ${unitLbl}</th></tr></thead><tbody>${rows}</tbody></table><div style="font-size:10px;color:#b0a8c8;margin-top:6px">✓ melhor custo unitário</div>`;
+    } else {
+      const r = comp[0];
+      qtySection = `<div class="total-box"><div><div class="lbl">Total de Venda</div><div class="tv">${brl(r.total)}</div><div style="font-size:11px;color:#6b5f8a;margin-top:4px">${(r.tiраgemInput || 0).toLocaleString('pt-BR')} ${qtyLabel}</div></div><div style="text-align:right"><div class="lbl">Valor ${unitLbl}</div><div class="uv">${brl(r.unitario, 4)}</div></div></div>`;
+    }
+    const tel = cli?.tel?.replace(/\D/g, '');
+    const waMsg = encodeURIComponent(`Olá ${clienteNome || ''}, segue proposta Nº ${ref}:\n\n${entry.desc}\n\n${comp.map(r => `${(r.tiраgemInput||0).toLocaleString('pt-BR')} ${qtyLabel} → ${brl(r.total)} (${brl(r.unitario,4)}/un.)`).join('\n')}\n\nVálido por 30 dias. Aguardo retorno!`);
+    const waLink = tel ? `https://wa.me/55${tel}?text=${waMsg}` : '';
+
+    const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Proposta ${ref}</title>
+<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Segoe UI,Arial,sans-serif;font-size:13px;color:#1e1535;background:#fff;padding:32px;max-width:720px;margin:0 auto}h2{font-size:11px;font-weight:700;color:#7c3aed;text-transform:uppercase;letter-spacing:1px;margin:22px 0 8px;padding-bottom:4px;border-bottom:2px solid #ece9f5}.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;padding-bottom:18px;border-bottom:3px solid #7c3aed}.logo{font-size:22px;font-weight:900;color:#7c3aed;letter-spacing:-1px}.logo span{color:#06b6d4}.meta{text-align:right;font-size:11.5px;color:#6b5f8a;line-height:1.9}.meta strong{font-size:14px;color:#1e1535;display:block;margin-bottom:2px}table{width:100%;border-collapse:collapse;font-size:12.5px}td,th{padding:7px 8px;border-bottom:1px solid #ece9f5}td:first-child{color:#6b5f8a;width:42%}td.num{text-align:right;font-weight:600;font-family:monospace}tr.best td{background:#f0fdf4}tr.best td.best-unit{color:#16a34a;font-weight:800}.total-box{background:#f3f0ff;border:2px solid #7c3aed;border-radius:10px;padding:18px 22px;margin-top:20px;display:flex;justify-content:space-between;align-items:center}.lbl{font-size:10px;font-weight:700;color:#6b5f8a;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}.tv{font-size:28px;font-weight:900;color:#7c3aed;font-family:monospace}.uv{font-size:15px;color:#06b6d4;font-family:monospace;font-weight:700}.actions{display:flex;gap:12px;margin-bottom:24px;justify-content:center}.btn{padding:10px 24px;border-radius:6px;border:none;font-size:13px;font-weight:700;cursor:pointer;text-decoration:none;display:inline-block;text-align:center}@media print{.actions{display:none!important}}</style>
+</head><body>
+<div class="actions"><button class="btn" style="background:#7c3aed;color:#fff" onclick="window.print()">🖨 Salvar como PDF</button>${waLink ? `<a class="btn" style="background:#25D366;color:#fff" href="${waLink}" target="_blank">💬 WhatsApp</a>` : ''}</div>
+<div class="header"><div><div class="logo">MOHR<span>SYS</span></div><div style="font-size:11px;color:#6b5f8a;margin-top:4px">Soluções em Impressão Offset</div></div><div class="meta"><div>PROPOSTA COMERCIAL</div><strong>${ref}</strong><div>${now} · Válida até ${validade}</div></div></div>
+<h2>Destinatário</h2><table><tbody><tr><td>Cliente</td><td><strong>${clienteNome || '—'}</strong></td></tr>${entry.prazo ? `<tr><td>Prazo Estimado</td><td>${entry.prazo}</td></tr>` : ''}</tbody></table>
+<h2>Especificações</h2><div style="font-size:12px;color:#374151;margin-bottom:8px">${entry.desc}</div>${jobRowsHTML ? `<table><tbody>${jobRowsHTML}</tbody></table>` : ''}
+<h2>${comp.length > 1 ? 'Opções de Quantidade' : 'Valor da Proposta'}</h2>${qtySection}
+<script>window.onload=()=>window.print()</script>
+</body></html>`;
+
+    const popup = window.open('', '_blank', 'width=820,height=920');
+    if (popup) { popup.document.write(html); popup.document.close(); }
+    void entry;
   };
 
   const handleToggleComp = () => {
@@ -825,11 +901,14 @@ export default function CalculoPage({ onGoTo, editEntry, onEditClear }: Props) {
                 </div>
 
                 {/* Ações */}
-                <div style={{ display: 'flex', gap: '8px', paddingTop: '12px', borderTop: '1px solid var(--border)' }}>
-                  <button className="btn btn-primary" style={{ flex: 1 }} onClick={handleSalvar}>
+                <div style={{ display: 'flex', gap: '8px', paddingTop: '12px', borderTop: '1px solid var(--border)', flexWrap: 'wrap' }}>
+                  <button className="btn btn-primary" style={{ flex: 2, minWidth: '120px' }} onClick={handleSalvar}>
                     {editingId ? 'Atualizar Orçamento' : 'Salvar Orçamento'}
                   </button>
-                  <button className="btn btn-secondary" onClick={handleToggleComp}>
+                  <button className="btn btn-secondary" style={{ flex: 1 }} onClick={handleGerarProposta}>
+                    Proposta
+                  </button>
+                  <button className="btn btn-secondary" style={{ flex: 1 }} onClick={handleToggleComp}>
                     {showComp ? 'Fechar' : 'Tiragens'}
                   </button>
                 </div>

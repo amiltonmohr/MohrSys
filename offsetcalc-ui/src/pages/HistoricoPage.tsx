@@ -110,94 +110,153 @@ function gerarOP(entry: OrcamentoEntry): string {
 
 // ── Gerador de Proposta Comercial ─────────────────────────────────────────────
 
-function gerarProposta(entry: OrcamentoEntry): string {
+function gerarPropostaHTML(entry: OrcamentoEntry, telCliente?: string): string {
   const res = entry.resultado as Record<string, unknown> | undefined;
   const now = new Date().toLocaleDateString('pt-BR');
   const validade = new Date(Date.now() + 30 * 24 * 3600 * 1000).toLocaleDateString('pt-BR');
-  const n = (v: unknown, dec = 2) => typeof v === 'number' ? v.toFixed(dec) : '—';
+  const brl = (v: unknown, dec = 2) => typeof v === 'number' ? `R$ ${v.toFixed(dec).replace('.', ',')}` : '—';
   const jobLines: { label: string; value: string }[] = Array.isArray((res as any)?.jobLines) ? (res as any).jobLines : [];
+
+  const comp: { tiраgemInput?: number; tiragem?: number; total: number; unitario: number }[] =
+    Array.isArray(entry.tiragensComparativo) && (entry.tiragensComparativo as unknown[]).length > 0
+      ? entry.tiragensComparativo as { tiраgemInput?: number; total: number; unitario: number }[]
+      : [{ tiраgemInput: (res?.tiраgemInput ?? res?.tiragem ?? entry.qty ?? 0) as number, total: (entry.total as number) || 0, unitario: (entry.unitario as number) || 0 }];
+
+  const blocoAtivo = !!(res?.blocoAtivo);
+  const revistaAtivo = !!(res?.revistaAtivo);
+  const qtyLabel = blocoAtivo ? 'blocos' : revistaAtivo ? 'exemplares' : 'unidades';
+  const unitLabel = blocoAtivo ? 'por Bloco' : revistaAtivo ? 'por Exemplar' : 'Unitário';
+
+  // Seção de quantidade — tabela se múltiplas tiragens, box se única
+  let qtySection = '';
+  if (comp.length > 1) {
+    const bestUnit = Math.min(...comp.map(r => r.unitario || Infinity));
+    const rows = comp.map(r => {
+      const qty = (r.tiраgemInput ?? r.tiragem ?? 0);
+      const best = Math.abs((r.unitario || 0) - bestUnit) < 0.0001 && bestUnit < Infinity;
+      return `<tr${best ? ' class="best"' : ''}>
+        <td>${qty.toLocaleString('pt-BR')} ${qtyLabel}</td>
+        <td class="num">${brl(r.total)}</td>
+        <td class="num best-unit">${brl(r.unitario, 4)}${best ? ' ✓' : ''}</td>
+      </tr>`;
+    }).join('');
+    qtySection = `<h2>Opções de Quantidade</h2>
+      <table>
+        <thead><tr>
+          <th style="text-align:left;padding:6px 8px;border-bottom:2px solid #7c3aed;font-size:11px;text-transform:uppercase;color:#6b5f8a">Quantidade</th>
+          <th style="text-align:right;padding:6px 8px;border-bottom:2px solid #7c3aed;font-size:11px;text-transform:uppercase;color:#6b5f8a">Preço Total</th>
+          <th style="text-align:right;padding:6px 8px;border-bottom:2px solid #7c3aed;font-size:11px;text-transform:uppercase;color:#6b5f8a">Valor ${unitLabel}</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <div style="font-size:10px;color:#b0a8c8;margin-top:6px">✓ melhor custo unitário</div>`;
+  } else {
+    const r = comp[0];
+    qtySection = `<div class="total-box">
+      <div>
+        <div class="lbl">Total de Venda</div>
+        <div class="tv">${brl(r.total)}</div>
+        <div style="font-size:11px;color:#6b5f8a;margin-top:4px">${((r.tiраgemInput ?? r.tiragem) || 0).toLocaleString('pt-BR')} ${qtyLabel}</div>
+      </div>
+      <div style="text-align:right">
+        <div class="lbl">Valor ${unitLabel}</div>
+        <div class="uv">${brl(r.unitario, 4)}</div>
+      </div>
+    </div>`;
+  }
+
+  // WhatsApp link
+  const tel = telCliente?.replace(/\D/g, '');
+  const waMsg = encodeURIComponent(
+    `Olá ${entry.cliente || ''}, segue proposta Nº ${entry.ref}:\n\n${entry.desc || 'Serviço Gráfico'}\n\n` +
+    comp.map(r => `${((r.tiраgemInput ?? r.tiragem) || 0).toLocaleString('pt-BR')} ${qtyLabel} → ${brl(r.total)} (${brl(r.unitario, 4)}/un.)`).join('\n') +
+    `\n\nVálido por 30 dias. Aguardo retorno!`
+  );
+  const waLink = tel ? `https://wa.me/55${tel}?text=${waMsg}` : '';
+
+  const jobRowsHTML = jobLines
+    .filter(l => !l.label.toLowerCase().includes('custo'))
+    .map(l => `<tr><td style="color:#6b5f8a;width:42%">${l.label}</td><td><strong>${l.value}</strong></td></tr>`)
+    .join('');
 
   return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8">
-  <title>Proposta — ${entry.ref}</title>
-  <style>
-    *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:Arial,sans-serif;font-size:13px;color:#1a1a2e;padding:32px;max-width:800px;margin:0 auto}
-    .header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #7c3aed;padding-bottom:20px;margin-bottom:24px}
-    .logo{font-size:26px;font-weight:900;color:#7c3aed;letter-spacing:-1px}.logo span{color:#06b6d4}
-    .sec{margin:16px 0}
-    .sec-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#7c3aed;border-bottom:1px solid #e5e7eb;padding-bottom:4px;margin-bottom:10px}
-    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-    .lbl{font-size:10px;color:#6b5f8a;text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px}
-    .val{font-weight:600;font-size:13px}
-    table{width:100%;border-collapse:collapse;font-size:12px}
-    th{background:#f5f3fa;padding:8px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:#6b5f8a;border:1px solid #e5e7eb}
-    td{padding:7px 8px;border:1px solid #e5e7eb}
-    .destaque{background:linear-gradient(135deg,#f3f0ff,#edf9fc);border:1px solid rgba(124,58,237,.2);border-radius:10px;padding:20px;margin:16px 0;text-align:center}
-    .assin{display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:48px}
-    .assin-linha{border-top:1px solid #9ca3af;padding-top:6px;font-size:11px;color:#6b7280;text-align:center;margin-top:36px}
-    @media print{body{padding:16px}}
-  </style>
+<meta charset="UTF-8">
+<title>Proposta ${entry.ref}</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Segoe UI,Arial,sans-serif;font-size:13px;color:#1e1535;background:#fff;padding:32px;max-width:720px;margin:0 auto}
+h2{font-size:11px;font-weight:700;color:#7c3aed;text-transform:uppercase;letter-spacing:1px;margin:22px 0 8px;padding-bottom:4px;border-bottom:2px solid #ece9f5}
+.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;padding-bottom:18px;border-bottom:3px solid #7c3aed}
+.logo{font-size:22px;font-weight:900;color:#7c3aed;letter-spacing:-1px}.logo span{color:#06b6d4}
+.meta{text-align:right;font-size:11.5px;color:#6b5f8a;line-height:1.9}
+.meta strong{font-size:14px;color:#1e1535;display:block;margin-bottom:2px}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+td,th{padding:7px 8px;border-bottom:1px solid #ece9f5}
+td:first-child{color:#6b5f8a;width:42%}
+td.num{text-align:right;font-weight:600;font-family:monospace}
+tr.best td{background:#f0fdf4}
+tr.best td.best-unit{color:#16a34a;font-weight:800}
+.total-box{background:#f3f0ff;border:2px solid #7c3aed;border-radius:10px;padding:18px 22px;margin-top:20px;display:flex;justify-content:space-between;align-items:center}
+.lbl{font-size:10px;font-weight:700;color:#6b5f8a;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
+.tv{font-size:28px;font-weight:900;color:#7c3aed;font-family:monospace}
+.uv{font-size:15px;color:#06b6d4;font-family:monospace;font-weight:700}
+.footer{margin-top:28px;padding-top:12px;border-top:1px solid #ece9f5;font-size:10.5px;color:#b0a8c8;text-align:center}
+.actions{display:flex;gap:12px;margin-bottom:24px;justify-content:center}
+.btn{padding:10px 24px;border-radius:6px;border:none;font-size:13px;font-weight:700;cursor:pointer;text-decoration:none;display:inline-block;text-align:center}
+.cond td{border:none;padding:5px 8px}
+@media print{.actions{display:none!important}}
+</style>
 </head>
 <body>
-  <div class="header">
-    <div>
-      <div class="logo">MOHR<span>SYS</span></div>
-      <div style="font-size:11px;color:#6b5f8a;margin-top:4px">Soluções em Impressão Offset</div>
-    </div>
-    <div style="text-align:right">
-      <div style="font-size:13px;font-weight:700;color:#7c3aed">PROPOSTA COMERCIAL</div>
-      <div style="font-size:22px;font-weight:900">${entry.ref}</div>
-      <div style="font-size:11px;color:#6b5f8a">${now} · Válida até ${validade}</div>
-    </div>
+<div class="actions">
+  <button class="btn" style="background:#7c3aed;color:#fff" onclick="window.print()">🖨 Salvar como PDF</button>
+  ${waLink ? `<a class="btn" style="background:#25D366;color:#fff" href="${waLink}" target="_blank">💬 WhatsApp</a>` : ''}
+</div>
+<div class="header">
+  <div>
+    <div class="logo">MOHR<span>SYS</span></div>
+    <div style="font-size:11px;color:#6b5f8a;margin-top:4px">Soluções em Impressão Offset</div>
   </div>
+  <div class="meta">
+    <div>PROPOSTA COMERCIAL</div>
+    <strong>${entry.ref}</strong>
+    <div>${now} · Válida até ${validade}</div>
+  </div>
+</div>
 
-  <div class="sec">
-    <div class="sec-title">Destinatário</div>
-    <div class="grid2">
-      <div><div class="lbl">Cliente</div><div class="val">${entry.cliente || '—'}</div></div>
-      <div><div class="lbl">Data da Proposta</div><div class="val">${now}</div></div>
-      ${entry.prazo ? `<div><div class="lbl">Prazo Estimado de Entrega</div><div class="val">${entry.prazo}</div></div>` : ''}
-    </div>
-  </div>
+<h2>Destinatário</h2>
+<table class="cond"><tbody>
+  <tr><td style="color:#6b5f8a">Cliente</td><td><strong>${entry.cliente || '—'}</strong></td></tr>
+  ${entry.prazo ? `<tr><td style="color:#6b5f8a">Prazo Estimado</td><td>${entry.prazo}</td></tr>` : ''}
+</tbody></table>
 
-  <div class="sec">
-    <div class="sec-title">Especificações do Material</div>
-    <div style="font-size:12px;color:#374151;margin-bottom:8px">${entry.desc}</div>
-    ${jobLines.length > 0 ? `
-    <table><tbody>
-      ${jobLines.filter(l => !l.label.includes('Custo') && !l.label.includes('custo')).map(l => `<tr><td style="color:#6b5f8a;width:42%">${l.label}</td><td><strong>${l.value}</strong></td></tr>`).join('')}
-    </tbody></table>` : ''}
-  </div>
+<h2>Especificações do Material</h2>
+<div style="font-size:12px;color:#374151;margin-bottom:8px">${entry.desc}</div>
+${jobRowsHTML ? `<table><tbody>${jobRowsHTML}</tbody></table>` : ''}
 
-  <div class="destaque">
-    <div style="font-size:11px;color:#6b5f8a;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Valor Total da Proposta</div>
-    <div style="font-size:40px;font-weight:900;color:#7c3aed">R$ ${n(res?.total ?? entry.total as number)}</div>
-    <div style="font-size:14px;color:#374151;margin-top:6px">
-      ${(res?.unitarioLabel as string) || 'Valor Unitário'}:
-      <strong style="color:#065f46">R$ ${n(res?.unitario ?? entry.unitario as number, 4)}</strong>
-    </div>
-    ${res && (res.tiragem as number) ? `<div style="font-size:12px;color:#6b5f8a;margin-top:4px">Tiragem: ${(res.tiragem as number).toLocaleString('pt-BR')} unidades</div>` : ''}
-  </div>
+<h2>${comp.length > 1 ? 'Opções de Quantidade' : 'Valor da Proposta'}</h2>
+${qtySection}
 
-  <div class="sec">
-    <div class="sec-title">Condições Comerciais</div>
-    <table><tbody>
-      <tr><td style="color:#6b5f8a;width:42%">Validade da proposta</td><td>30 dias a partir de ${now}</td></tr>
-      <tr><td style="color:#6b5f8a">Forma de pagamento</td><td>A combinar</td></tr>
-      <tr><td style="color:#6b5f8a">Impostos</td><td>Inclusos no valor apresentado</td></tr>
-      <tr><td style="color:#6b5f8a">Entrega</td><td>${entry.prazo ? `Prazo estimado: ${entry.prazo}` : 'A combinar após aprovação'}</td></tr>
-    </tbody></table>
-  </div>
+<h2>Condições Comerciais</h2>
+<table class="cond"><tbody>
+  <tr><td style="color:#6b5f8a">Validade da proposta</td><td>30 dias a partir de ${now}</td></tr>
+  <tr><td style="color:#6b5f8a">Forma de pagamento</td><td>A combinar</td></tr>
+  <tr><td style="color:#6b5f8a">Impostos</td><td>Inclusos no valor apresentado</td></tr>
+  <tr><td style="color:#6b5f8a">Entrega</td><td>${entry.prazo ? `Prazo estimado: ${entry.prazo}` : 'A combinar após aprovação'}</td></tr>
+</tbody></table>
 
-  <div class="assin">
-    <div><div class="assin-linha">Aprovado pelo Cliente / Data</div></div>
-    <div><div class="assin-linha">Responsável Comercial / Data</div></div>
-  </div>
-  <script>window.onload=()=>window.print()</script>
+<div class="footer">
+  Este orçamento é válido por 30 dias. Após a aprovação, o prazo de produção será confirmado.<br/>
+  MohrSys · Sistema de Orçamento para Gráficas Offset
+</div>
+<script>window.onload=()=>window.print()</script>
 </body></html>`;
+}
+
+function gerarProposta(entry: OrcamentoEntry, telCliente?: string): string {
+  return gerarPropostaHTML(entry, telCliente);
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -212,7 +271,7 @@ function statusLabel(s: string) {
 // ── Componente ────────────────────────────────────────────────────────────────
 
 export default function HistoricoPage({ onGoTo, onEditar }: Props) {
-  const { historico, toggleAprovado, removeOrcamento, addOrcamento, updateOrcamento, toast } = useApp();
+  const { historico, clientes, toggleAprovado, removeOrcamento, addOrcamento, updateOrcamento, toast } = useApp();
 
   const [search, setSearch] = useState('');
   const [filtro, setFiltro] = useState('todos');
@@ -239,8 +298,9 @@ export default function HistoricoPage({ onGoTo, onEditar }: Props) {
   };
 
   const abrirProposta = (e: OrcamentoEntry) => {
+    const cli = clientes.find(c => c.nome === e.cliente);
     const w = window.open('', '_blank', 'width=820,height=920');
-    if (w) { w.document.write(gerarProposta(e)); w.document.close(); }
+    if (w) { w.document.write(gerarProposta(e, cli?.tel)); w.document.close(); }
   };
 
   const duplicar = (e: OrcamentoEntry) => {
