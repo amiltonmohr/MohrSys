@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
-import { useApp, Cliente } from '../context/AppContext';
+import { useApp } from '../context/AppContext';
+import { Cliente } from '../context/AppContext';
 
 type Secao = 'orcamento' | 'clientes' | 'config' | 'historico' | 'dashboard';
 
@@ -7,49 +8,115 @@ interface Props {
   onGoTo: (s: Secao) => void;
 }
 
+const UFS = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'];
+
+function maskTel(v: string): string {
+  const n = v.replace(/\D/g, '').slice(0, 11);
+  if (n.length <= 10) return n.replace(/(\d{2})(\d{4})(\d{0,4})/, '($1) $2-$3').replace(/\(\).*/, '');
+  return n.replace(/(\d{2})(\d{5})(\d{0,4})/, '($1) $2-$3');
+}
+
+function maskCep(v: string): string {
+  return v.replace(/\D/g, '').slice(0, 8).replace(/(\d{5})(\d{1,3})/, '$1-$2');
+}
+
+function maskDoc(v: string, tipo: 'pf' | 'pj'): string {
+  const n = v.replace(/\D/g, '');
+  if (tipo === 'pf') {
+    return n.slice(0, 11)
+      .replace(/(\d{3})(\d)/, '$1.$2')
+      .replace(/(\d{3})(\d)/, '$1.$2')
+      .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+  }
+  return n.slice(0, 14)
+    .replace(/(\d{2})(\d)/, '$1.$2')
+    .replace(/(\d{3})(\d)/, '$1.$2')
+    .replace(/(\d{3})(\d)/, '$1/$2')
+    .replace(/(\d{4})(\d{1,2})$/, '$1-$2');
+}
+
+async function buscarCep(cep: string): Promise<Partial<Cliente> | null> {
+  const n = cep.replace(/\D/g, '');
+  if (n.length !== 8) return null;
+  try {
+    const res = await fetch(`https://viacep.com.br/ws/${n}/json/`);
+    const d = await res.json();
+    if (d.erro) return null;
+    return { rua: d.logradouro || '', bairro: d.bairro || '', cidade: d.localidade || '', uf: d.uf || '' };
+  } catch { return null; }
+}
+
+type Draft = Omit<Cliente, 'id' | 'ts'>;
+const emptyDraft = (): Draft => ({
+  nome: '', tipo: 'pf', doc: '', tel: '', email: '',
+  cep: '', uf: 'SC', rua: '', num: '', bairro: '', cidade: '', obs: '',
+});
+
 export default function ClientesPage({ onGoTo }: Props) {
   const { clientes, addCliente, editCliente, removeCliente, toast } = useApp();
-
   const [search, setSearch] = useState('');
-  const [showForm, setShowForm] = useState(false);
-  const [novoNome, setNovoNome] = useState('');
-  const [novoTel, setNovoTel] = useState('');
-
-  // Edição inline
+  const [draft, setDraft] = useState<Draft>(emptyDraft());
   const [editId, setEditId] = useState<string | null>(null);
-  const [editNome, setEditNome] = useState('');
-  const [editTel, setEditTel] = useState('');
-
-  // Confirmação de exclusão
+  const [showForm, setShowForm] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [cepLoading, setCepLoading] = useState(false);
+
+  const set = (patch: Partial<Draft>) => setDraft(d => ({ ...d, ...patch }));
 
   const filtered = useMemo(() => {
     if (!search.trim()) return clientes;
     const q = search.toLowerCase();
     return clientes.filter(c =>
-      c.nome.toLowerCase().includes(q) || c.tel.toLowerCase().includes(q)
+      c.nome.toLowerCase().includes(q) ||
+      (c.tel || '').includes(q) ||
+      (c.doc || '').replace(/\D/g, '').includes(q.replace(/\D/g, '')) ||
+      (c.cidade || '').toLowerCase().includes(q) ||
+      (c.email || '').toLowerCase().includes(q)
     );
   }, [clientes, search]);
 
-  const handleAdd = () => {
-    if (!novoNome.trim()) { toast('Informe o nome do cliente'); return; }
-    addCliente(novoNome.trim(), novoTel.trim());
-    setNovoNome(''); setNovoTel(''); setShowForm(false);
-    toast('Cliente adicionado!');
-  };
+  const recentes30 = useMemo(() => {
+    const corte = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    return clientes.filter(c => c.ts > corte).length;
+  }, [clientes]);
 
-  const startEdit = (c: Cliente) => {
-    setEditId(c.id); setEditNome(c.nome); setEditTel(c.tel);
-  };
-
-  const confirmEdit = () => {
-    if (!editId || !editNome.trim()) return;
-    editCliente(editId, editNome.trim(), editTel.trim());
+  const abrirNovoForm = () => {
+    setDraft(emptyDraft());
     setEditId(null);
-    toast('Cliente atualizado!');
+    setShowForm(true);
   };
 
-  const cancelEdit = () => setEditId(null);
+  const abrirEditForm = (c: Cliente) => {
+    setDraft({
+      nome: c.nome, tipo: c.tipo || 'pf', doc: c.doc || '', tel: c.tel || '',
+      email: c.email || '', cep: c.cep || '', uf: c.uf || 'SC',
+      rua: c.rua || '', num: c.num || '', bairro: c.bairro || '',
+      cidade: c.cidade || '', obs: c.obs || '',
+    });
+    setEditId(c.id);
+    setShowForm(true);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleSalvar = () => {
+    if (!draft.nome.trim()) { toast('Informe o nome do cliente'); return; }
+    if (editId) {
+      editCliente(editId, draft);
+      toast('Cliente atualizado!');
+    } else {
+      addCliente(draft);
+      toast('Cliente cadastrado!');
+    }
+    setDraft(emptyDraft());
+    setEditId(null);
+    setShowForm(false);
+  };
+
+  const handleCancel = () => {
+    setDraft(emptyDraft());
+    setEditId(null);
+    setShowForm(false);
+  };
 
   const handleDelete = (id: string) => {
     removeCliente(id);
@@ -62,74 +129,164 @@ export default function ClientesPage({ onGoTo }: Props) {
     onGoTo('orcamento');
   };
 
-  // KPI
-  const total = clientes.length;
-  const recentes = clientes.filter(c => Date.now() - c.ts < 30 * 24 * 3600 * 1000).length;
+  const handleCepBlur = async () => {
+    if (!draft.cep || draft.cep.replace(/\D/g, '').length !== 8) return;
+    setCepLoading(true);
+    const dados = await buscarCep(draft.cep);
+    if (dados) set(dados);
+    setCepLoading(false);
+  };
 
   return (
     <div className="section active">
-      {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
         <h2 style={{ fontSize: '22px', fontWeight: 800 }}>
-          Gerenciar <span style={{ color: 'var(--accent)' }}>Clientes</span>
+          Cadastro de <span style={{ color: 'var(--accent)' }}>Clientes</span>
         </h2>
-        <button className="btn btn-primary" onClick={() => setShowForm(v => !v)}>
-          {showForm ? '✕ Cancelar' : '+ Novo Cliente'}
-        </button>
+        {!showForm && (
+          <button className="btn btn-primary" onClick={abrirNovoForm}>+ Novo Cliente</button>
+        )}
       </div>
 
       {/* KPIs */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', marginBottom: '20px' }}>
-        <div className="card" style={{ padding: '16px', margin: 0 }}>
-          <div style={{ fontSize: '10px', color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>Total de Clientes</div>
-          <div style={{ fontSize: '28px', fontWeight: 800, color: 'var(--accent)', fontFamily: 'var(--mono)' }}>{total}</div>
-        </div>
-        <div className="card" style={{ padding: '16px', margin: 0 }}>
-          <div style={{ fontSize: '10px', color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>Cadastrados (30 dias)</div>
-          <div style={{ fontSize: '28px', fontWeight: 800, color: '#10b981', fontFamily: 'var(--mono)' }}>{recentes}</div>
-        </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px,1fr))', gap: '12px', marginBottom: '20px' }}>
+        {[
+          { label: 'Total de Clientes', value: clientes.length, color: 'var(--accent)' },
+          { label: 'Cadastrados 30 dias', value: recentes30, color: '#10b981' },
+        ].map(k => (
+          <div key={k.label} className="card" style={{ padding: '16px', margin: 0 }}>
+            <div style={{ fontSize: '10px', color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>{k.label}</div>
+            <div style={{ fontSize: '28px', fontWeight: 800, color: k.color, fontFamily: 'var(--mono)' }}>{k.value}</div>
+          </div>
+        ))}
       </div>
 
-      {/* Formulário de adição */}
+      {/* Formulário de cadastro/edição */}
       {showForm && (
         <div className="card" style={{ marginBottom: '20px' }}>
-          <div className="card-title">Novo Cliente</div>
+          <div className="card-title">{editId ? 'Editar Cliente' : 'Novo Cliente'}</div>
+
+          {/* Identificação */}
+          <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px', paddingBottom: '4px', borderBottom: '1px solid var(--border)' }}>
+            Identificação
+          </div>
+          <div className="field">
+            <label>Nome / Razão Social</label>
+            <input type="text" value={draft.nome} onChange={e => set({ nome: e.target.value })}
+              placeholder="Nome completo ou empresa" autoFocus />
+          </div>
           <div className="grid-2">
             <div className="field">
-              <label>Nome / Razão Social</label>
-              <input
-                type="text" value={novoNome} onChange={e => setNovoNome(e.target.value)}
-                placeholder="Digite o nome..." autoFocus
-                onKeyDown={e => e.key === 'Enter' && handleAdd()}
-              />
+              <label>Tipo</label>
+              <select value={draft.tipo} onChange={e => set({ tipo: e.target.value as 'pf' | 'pj', doc: '' })}>
+                <option value="pf">Pessoa Física</option>
+                <option value="pj">Pessoa Jurídica</option>
+              </select>
             </div>
             <div className="field">
-              <label>Telefone</label>
-              <input
-                type="tel" value={novoTel} onChange={e => setNovoTel(e.target.value)}
-                placeholder="(00) 00000-0000"
-                onKeyDown={e => e.key === 'Enter' && handleAdd()}
-              />
+              <label>{draft.tipo === 'pj' ? 'CNPJ' : 'CPF'}</label>
+              <input type="text" value={draft.doc || ''}
+                onChange={e => set({ doc: maskDoc(e.target.value, draft.tipo || 'pf') })}
+                placeholder={draft.tipo === 'pj' ? '00.000.000/0001-00' : '000.000.000-00'} />
             </div>
           </div>
-          <button className="btn btn-primary" onClick={handleAdd}>Salvar Cliente</button>
+
+          {/* Contato */}
+          <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '1px', margin: '4px 0 8px', paddingBottom: '4px', borderBottom: '1px solid var(--border)' }}>
+            Contato
+          </div>
+          <div className="grid-2">
+            <div className="field">
+              <label>Telefone / WhatsApp</label>
+              <input type="tel" value={draft.tel || ''}
+                onChange={e => set({ tel: maskTel(e.target.value) })}
+                placeholder="(47) 99999-9999" />
+            </div>
+            <div className="field">
+              <label>E-mail</label>
+              <input type="email" value={draft.email || ''}
+                onChange={e => set({ email: e.target.value })}
+                placeholder="cliente@email.com" />
+            </div>
+          </div>
+
+          {/* Endereço */}
+          <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '1px', margin: '4px 0 8px', paddingBottom: '4px', borderBottom: '1px solid var(--border)' }}>
+            Endereço
+          </div>
+          <div className="grid-2">
+            <div className="field">
+              <label>CEP {cepLoading && <span style={{ color: 'var(--accent2)', fontSize: '10px' }}>buscando...</span>}</label>
+              <input type="text" value={draft.cep || ''}
+                onChange={e => set({ cep: maskCep(e.target.value) })}
+                onBlur={handleCepBlur}
+                placeholder="00000-000" />
+            </div>
+            <div className="field">
+              <label>Estado (UF)</label>
+              <select value={draft.uf || ''} onChange={e => set({ uf: e.target.value })}>
+                <option value="">— UF —</option>
+                {UFS.map(uf => <option key={uf} value={uf}>{uf}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="grid-2">
+            <div className="field">
+              <label>Logradouro</label>
+              <input type="text" value={draft.rua || ''}
+                onChange={e => set({ rua: e.target.value })}
+                placeholder="Rua, Avenida..." />
+            </div>
+            <div className="field">
+              <label>Número</label>
+              <input type="text" value={draft.num || ''}
+                onChange={e => set({ num: e.target.value })}
+                placeholder="123" style={{ maxWidth: '100px' }} />
+            </div>
+          </div>
+          <div className="grid-2">
+            <div className="field">
+              <label>Bairro</label>
+              <input type="text" value={draft.bairro || ''}
+                onChange={e => set({ bairro: e.target.value })}
+                placeholder="Centro" />
+            </div>
+            <div className="field">
+              <label>Cidade</label>
+              <input type="text" value={draft.cidade || ''}
+                onChange={e => set({ cidade: e.target.value })}
+                placeholder="Blumenau" />
+            </div>
+          </div>
+
+          {/* Observações */}
+          <div className="field">
+            <label>Observações</label>
+            <textarea value={draft.obs || ''} onChange={e => set({ obs: e.target.value })} rows={2}
+              placeholder="Prazo especial, condições de pagamento, preferências..."
+              style={{ width: '100%', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: '6px', padding: '8px 10px', color: 'var(--text)', fontFamily: 'var(--mono)', fontSize: '12px', resize: 'vertical', outline: 'none' }} />
+          </div>
+
+          <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+            <button className="btn btn-primary" style={{ flex: 1 }} onClick={handleSalvar}>
+              {editId ? 'Salvar Alterações' : 'Cadastrar Cliente'}
+            </button>
+            <button className="btn btn-secondary" onClick={handleCancel}>Cancelar</button>
+          </div>
         </div>
       )}
 
-      {/* Busca */}
+      {/* Busca + lista */}
       <div className="card">
         <div className="field" style={{ margin: 0, marginBottom: filtered.length > 0 ? '16px' : 0 }}>
           <label>Pesquisar</label>
-          <input
-            type="text" value={search} onChange={e => setSearch(e.target.value)}
-            placeholder="Nome ou telefone..."
-          />
+          <input type="text" value={search} onChange={e => setSearch(e.target.value)}
+            placeholder="Nome, CPF/CNPJ, telefone, e-mail ou cidade..." />
         </div>
 
-        {/* Lista */}
         {filtered.length === 0 ? (
           <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text2)', fontSize: '13px' }}>
-            {search ? 'Nenhum cliente encontrado para a pesquisa.' : 'Nenhum cliente cadastrado ainda.'}
+            {search ? 'Nenhum cliente encontrado.' : 'Nenhum cliente cadastrado ainda.'}
           </div>
         ) : (
           <div>
@@ -139,46 +296,42 @@ export default function ClientesPage({ onGoTo }: Props) {
             </div>
 
             {filtered.map(c => (
-              <div key={c.id} className="cli-row" style={{ borderRadius: '6px' }}>
-                {editId === c.id ? (
-                  // Modo edição
-                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flex: 1, flexWrap: 'wrap' }}>
-                    <input
-                      value={editNome} onChange={e => setEditNome(e.target.value)}
-                      style={{ flex: 2, minWidth: '140px', background: 'var(--surface2)', border: '1px solid var(--accent)', borderRadius: '6px', padding: '6px 10px', color: 'var(--text)', fontFamily: 'var(--mono)', fontSize: '13px' }}
-                      autoFocus onKeyDown={e => { if (e.key === 'Enter') confirmEdit(); if (e.key === 'Escape') cancelEdit(); }}
-                    />
-                    <input
-                      value={editTel} onChange={e => setEditTel(e.target.value)}
-                      placeholder="Telefone"
-                      style={{ flex: 1, minWidth: '120px', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: '6px', padding: '6px 10px', color: 'var(--text)', fontFamily: 'var(--mono)', fontSize: '13px' }}
-                      onKeyDown={e => { if (e.key === 'Enter') confirmEdit(); if (e.key === 'Escape') cancelEdit(); }}
-                    />
-                    <button className="btn btn-primary" style={{ fontSize: '11px', padding: '6px 12px' }} onClick={confirmEdit}>OK</button>
-                    <button className="btn btn-secondary" style={{ fontSize: '11px', padding: '6px 12px' }} onClick={cancelEdit}>Cancelar</button>
-                  </div>
-                ) : (
-                  // Modo visualização
-                  <>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 600, fontSize: '13px' }}>{c.nome}</div>
-                      {c.tel && <div className="cli-tel">{c.tel}</div>}
-                      <div style={{ fontSize: '10px', color: 'var(--text3)', marginTop: '2px' }}>
-                        Cadastrado em {new Date(c.ts).toLocaleDateString('pt-BR')}
+              <div key={c.id} className="cli-row" style={{ borderRadius: '6px', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
+                <div style={{ display: 'flex', width: '100%', gap: '8px', alignItems: 'flex-start' }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 700, fontSize: '13px' }}>
+                      {c.nome}
+                      {c.tipo && (
+                        <span style={{ marginLeft: '6px', fontSize: '10px', padding: '1px 5px', borderRadius: '4px', background: c.tipo === 'pj' ? 'rgba(124,58,237,.12)' : 'rgba(16,185,129,.1)', color: c.tipo === 'pj' ? 'var(--accent)' : '#10b981', fontWeight: 700 }}>
+                          {c.tipo === 'pj' ? 'PJ' : 'PF'}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: '11px', color: 'var(--text2)', marginTop: '2px', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                      {c.doc && <span>{c.doc}</span>}
+                      {c.tel && <span>{c.tel}</span>}
+                      {c.email && <span>{c.email}</span>}
+                      {(c.cidade || c.uf) && <span>{[c.cidade, c.uf].filter(Boolean).join(' — ')}</span>}
+                    </div>
+                    {c.obs && (
+                      <div style={{ fontSize: '10px', color: 'var(--text3)', marginTop: '2px', fontStyle: 'italic' }}>
+                        {c.obs.slice(0, 80)}{c.obs.length > 80 ? '…' : ''}
                       </div>
+                    )}
+                    <div style={{ fontSize: '10px', color: 'var(--text3)', marginTop: '2px' }}>
+                      Cadastrado em {new Date(c.ts).toLocaleDateString('pt-BR')}
                     </div>
-                    <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
-                      <button className="btn btn-secondary" style={{ fontSize: '11px', padding: '5px 10px' }}
-                        onClick={() => irParaOrcamento(c)}
-                        title="Abrir cálculo com este cliente">
-                        → Orçamento
-                      </button>
-                      <button className="btn-icon" onClick={() => startEdit(c)} title="Editar">✎</button>
-                      <button className="btn-icon" onClick={() => setDeleteId(c.id)} title="Excluir"
-                        style={{ color: '#ef4444' }}>✕</button>
-                    </div>
-                  </>
-                )}
+                  </div>
+                  <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                    <button className="btn btn-secondary" style={{ fontSize: '11px', padding: '5px 10px' }}
+                      onClick={() => irParaOrcamento(c)} title="Abrir cálculo com este cliente">
+                      → Orçamento
+                    </button>
+                    <button className="btn-icon" onClick={() => abrirEditForm(c)} title="Editar">✎</button>
+                    <button className="btn-icon" onClick={() => setDeleteId(c.id)} title="Excluir"
+                      style={{ color: '#ef4444' }}>✕</button>
+                  </div>
+                </div>
               </div>
             ))}
           </div>

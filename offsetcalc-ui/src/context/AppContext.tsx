@@ -6,7 +6,17 @@ import { AppConfig, configDefault } from '../utils/calculator';
 export interface Cliente {
   id: string;
   nome: string;
+  tipo?: 'pf' | 'pj';
+  doc?: string;
   tel: string;
+  email?: string;
+  cep?: string;
+  uf?: string;
+  rua?: string;
+  num?: string;
+  bairro?: string;
+  cidade?: string;
+  obs?: string;
   ts: number;
 }
 
@@ -28,8 +38,8 @@ interface AppContextValue {
   salvarConfig: (cfg: AppConfig) => Promise<void>;
   resetConfig: () => void;
   clientes: Cliente[];
-  addCliente: (nome: string, tel: string) => void;
-  editCliente: (id: string, nome: string, tel: string) => void;
+  addCliente: (c: Omit<Cliente, 'id' | 'ts'>) => void;
+  editCliente: (id: string, c: Partial<Omit<Cliente, 'id' | 'ts'>>) => void;
   removeCliente: (id: string) => void;
   historico: OrcamentoEntry[];
   addOrcamento: (entry: Omit<OrcamentoEntry, 'id' | 'ts' | 'aprovado'>) => void;
@@ -70,7 +80,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return ex || pd;
     });
     const custom = (saved.papeis || []).filter(p => !configDefault.papeis.find(pd => pd.tipo === p.tipo && pd.gramatura === p.gramatura));
-    return { ...configDefault, ...saved, papeis: [...papeisMerged, ...custom] };
+    return {
+      ...configDefault,
+      ...saved,
+      papeis: [...papeisMerged, ...custom],
+      formatos: saved.formatos?.length ? saved.formatos : configDefault.formatos,
+      imposto: saved.imposto ?? configDefault.imposto,
+    };
   });
 
   const [clientes, setClientes] = useState<Cliente[]>(() => loadLS<Cliente[]>(LS_CLI, []));
@@ -107,13 +123,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => { saveLS(LS_CLI, clientes); }, [clientes]);
   useEffect(() => { saveLS(LS_HIST, historico); }, [historico]);
 
-  const addCliente = useCallback((nome: string, tel: string) => {
-    const entry: Cliente = { id: Date.now().toString(), nome, tel, ts: Date.now() };
+  const addCliente = useCallback((c: Omit<Cliente, 'id' | 'ts'>) => {
+    const entry: Cliente = { ...c, id: Date.now().toString(), ts: Date.now() };
     setClientes(prev => [entry, ...prev]);
   }, []);
 
-  const editCliente = useCallback((id: string, nome: string, tel: string) => {
-    setClientes(prev => prev.map(c => c.id === id ? { ...c, nome, tel } : c));
+  const editCliente = useCallback((id: string, c: Partial<Omit<Cliente, 'id' | 'ts'>>) => {
+    setClientes(prev => prev.map(cli => cli.id === id ? { ...cli, ...c } : cli));
   }, []);
 
   const removeCliente = useCallback((id: string) => {
