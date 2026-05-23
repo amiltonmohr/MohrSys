@@ -1,0 +1,66 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: offsetcalc
+      POSTGRES_PASSWORD: offsetcalc123
+      POSTGRES_DB: offsetcalc
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./offsetcalc-api/src/db/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U offsetcalc"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  api:
+    image: mohrsys-api:latest
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://offsetcalc:offsetcalc123@postgres:5432/offsetcalc
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: prod-mohrsys-jwt-secret-xk9q2p8v3n7m1r5t
+      JWT_EXPIRY: 900
+      REFRESH_TOKEN_SECRET: prod-mohrsys-refresh-secret-w6y4u2i8o3e1a5s
+      REFRESH_TOKEN_EXPIRY: 604800
+      PORT: 3000
+      API_VERSION: v1
+      CORS_ORIGINS: https://mohrsys.novusti.com.br,http://mohrsys.novusti.com.br
+      LOG_LEVEL: info
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  ui:
+    image: mohrsys-ui:latest
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  redis_data:

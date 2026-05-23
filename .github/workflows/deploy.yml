@@ -1,0 +1,54 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build API image
+        run: docker build -t mohrsys-api:latest ./offsetcalc-api
+
+      - name: Build UI image
+        run: docker build -t mohrsys-ui:latest ./offsetcalc-ui
+
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.OCI_SSH_KEY }}" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -H 163.176.140.220 >> ~/.ssh/known_hosts
+
+      - name: Transfer images to VM
+        run: |
+          docker save mohrsys-api:latest mohrsys-ui:latest \
+            | gzip \
+            | ssh -i ~/.ssh/id_deploy ubuntu@163.176.140.220 'docker load'
+
+      - name: Copy compose file to VM
+        run: |
+          scp -i ~/.ssh/id_deploy docker-compose.deploy.yml \
+            ubuntu@163.176.140.220:~/MohrSys/docker-compose.deploy.yml
+
+      - name: Restart stack on VM
+        run: |
+          ssh -i ~/.ssh/id_deploy ubuntu@163.176.140.220 \
+            'cd ~/MohrSys && docker compose -f docker-compose.deploy.yml -p mohrsys up -d --no-build'
+
+      - name: Health check
+        run: |
+          sleep 15
+          STATUS=$(curl -sk -o /dev/null -w "%{http_code}" https://mohrsys.novusti.com.br)
+          echo "HTTP status: $STATUS"
+          [ "$STATUS" = "200" ] || exit 1
