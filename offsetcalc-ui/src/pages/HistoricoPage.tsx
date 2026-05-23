@@ -5,6 +5,7 @@ type Secao = 'orcamento' | 'clientes' | 'config' | 'historico' | 'dashboard';
 
 interface Props {
   onGoTo: (s: Secao) => void;
+  onEditar: (entry: OrcamentoEntry) => void;
 }
 
 // ── Gerador de OP (Ordem de Produção) ─────────────────────────────────────────
@@ -210,7 +211,7 @@ function statusLabel(s: string) {
 
 // ── Componente ────────────────────────────────────────────────────────────────
 
-export default function HistoricoPage({ onGoTo }: Props) {
+export default function HistoricoPage({ onGoTo, onEditar }: Props) {
   const { historico, toggleAprovado, removeOrcamento, addOrcamento, updateOrcamento, toast } = useApp();
 
   const [search, setSearch] = useState('');
@@ -391,6 +392,10 @@ export default function HistoricoPage({ onGoTo }: Props) {
                 </button>
                 <button className="btn btn-secondary" style={{ fontSize: '11px', padding: '5px 10px' }} onClick={() => duplicar(h)}>
                   Duplicar
+                </button>
+                <button className="btn btn-secondary" style={{ fontSize: '11px', padding: '5px 10px', color: 'var(--accent2)' }}
+                  onClick={() => onEditar(h)}>
+                  ✎ Editar
                 </button>
                 <button
                   className="btn btn-secondary"

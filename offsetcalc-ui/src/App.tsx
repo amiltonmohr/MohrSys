@@ -6,6 +6,7 @@ import ConfigPage from './pages/ConfigPage';
 import HistoricoPage from './pages/HistoricoPage';
 import DashboardPage from './pages/DashboardPage';
 import LoginPage from './pages/LoginPage';
+import type { OrcamentoEntry } from './context/AppContext';
 import './index.css';
 
 const LOGO_SVG = (
@@ -23,7 +24,13 @@ type Secao = 'orcamento' | 'clientes' | 'config' | 'historico' | 'dashboard';
 
 function AppInner({ setLoggedIn }: { setLoggedIn: (v: boolean) => void }) {
   const [secao, setSecao] = useState<Secao>('orcamento');
+  const [editEntry, setEditEntry] = useState<OrcamentoEntry | null>(null);
   const { toastMsg } = useApp();
+
+  const handleEditar = (entry: OrcamentoEntry) => {
+    setEditEntry(entry);
+    setSecao('orcamento');
+  };
 
   const logout = () => {
     localStorage.removeItem('access_token');
@@ -60,10 +67,10 @@ function AppInner({ setLoggedIn }: { setLoggedIn: (v: boolean) => void }) {
       </div>
 
       <div className="main" style={{ flex: 1 }}>
-        {secao === 'orcamento'  && <CalculoPage  onGoTo={(s: Secao) => setSecao(s)} />}
+        {secao === 'orcamento'  && <CalculoPage  onGoTo={(s: Secao) => setSecao(s)} editEntry={editEntry} onEditClear={() => setEditEntry(null)} />}
         {secao === 'clientes'   && <ClientesPage onGoTo={(s: Secao) => setSecao(s)} />}
         {secao === 'config'     && <ConfigPage   />}
-        {secao === 'historico'  && <HistoricoPage onGoTo={(s: Secao) => setSecao(s)} />}
+        {secao === 'historico'  && <HistoricoPage onGoTo={(s: Secao) => setSecao(s)} onEditar={handleEditar} />}
         {secao === 'dashboard'  && <DashboardPage />}
       </div>
 

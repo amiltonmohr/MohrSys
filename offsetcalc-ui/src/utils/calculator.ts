@@ -25,6 +25,7 @@ export interface AcabamentoConfig {
   faca?: number;
   valor?: number;
   percArea?: number;
+  valorMinimo?: number;
 }
 
 export interface FormatoConfig {
@@ -498,6 +499,7 @@ export function calcular(input: CalculatorInput, cfg: AppConfig): CalculatorResu
     } else if (a.formula === 'fixo') {
       val = a.valor || 0;
     }
+    val = Math.max(val, a.valorMinimo || 0);
     custoAcab += val;
     acabSel.push({ nome, val });
   });
@@ -610,18 +612,18 @@ export const configDefault: AppConfig = {
     { nome: 'GTO 52 (4 cores)',formato: '36x52cm', custoHora: 140, velocidade: 5000, pinca: 1.2 },
   ],
   acabamentos: [
-    { nome: 'Laminação Fosca',      formula: 'laminacao',   valorM2: 1.80 },
-    { nome: 'Laminação Brilho',     formula: 'laminacao',   valorM2: 1.80 },
-    { nome: 'Verniz UV Total',      formula: 'verniz_total', valorM2: 2.90 },
-    { nome: 'Verniz UV Localizado', formula: 'verniz_local', valorM2: 4.60, percArea: 30 },
-    { nome: 'Corte e Vinco',        formula: 'corte_vinco',  setup: 80, valorMil: 100 },
-    { nome: 'Dobra Simples',        formula: 'por_mil',     valorMil: 40 },
-    { nome: 'Dobra Cruzada',        formula: 'por_mil',     valorMil: 40 },
-    { nome: 'Grampeamento',         formula: 'por_mil',     valorMil: 90 },
-    { nome: 'Picote',               formula: 'por_mil',     valorMil: 80 },
-    { nome: 'Numeração',            formula: 'por_mil',     valorMil: 60 },
-    { nome: 'Blocagem',             formula: 'por_mil',     valorMil: 50 },
-    { nome: 'Relevo Seco',          formula: 'fixo',         valor: 350 },
+    { nome: 'Laminação Fosca',      formula: 'laminacao',   valorM2: 1.80, valorMinimo: 0 },
+    { nome: 'Laminação Brilho',     formula: 'laminacao',   valorM2: 1.80, valorMinimo: 0 },
+    { nome: 'Verniz UV Total',      formula: 'verniz_total', valorM2: 2.90, valorMinimo: 0 },
+    { nome: 'Verniz UV Localizado', formula: 'verniz_local', valorM2: 4.60, percArea: 30, valorMinimo: 0 },
+    { nome: 'Corte e Vinco',        formula: 'corte_vinco',  setup: 80, valorMil: 100, valorMinimo: 0 },
+    { nome: 'Dobra Simples',        formula: 'por_mil',     valorMil: 40,  valorMinimo: 0 },
+    { nome: 'Dobra Cruzada',        formula: 'por_mil',     valorMil: 40,  valorMinimo: 0 },
+    { nome: 'Grampeamento',         formula: 'por_mil',     valorMil: 90,  valorMinimo: 0 },
+    { nome: 'Picote',               formula: 'por_mil',     valorMil: 80,  valorMinimo: 0 },
+    { nome: 'Numeração',            formula: 'por_mil',     valorMil: 60,  valorMinimo: 0 },
+    { nome: 'Blocagem',             formula: 'por_mil',     valorMil: 50,  valorMinimo: 0 },
+    { nome: 'Relevo Seco',          formula: 'fixo',         valor: 350,   valorMinimo: 0 },
   ],
   formatos: [
     { nome: 'Inteiro',    w: 66,   h: 96,   div: '1',    obs: 'folha inteira' },
