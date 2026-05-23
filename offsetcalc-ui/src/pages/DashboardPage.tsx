@@ -97,11 +97,11 @@ export default function DashboardPage() {
   return (
     <div className="section active">
       <h2 style={{ fontSize: '22px', fontWeight: 800, marginBottom: '20px' }}>
-        Dashboard <span style={{ color: 'var(--accent)' }}>Gráfica</span>
+        Dashboard <span className="grad-text">Gráfica</span>
       </h2>
 
       {/* KPIs */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px', marginBottom: '24px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '12px', marginBottom: '24px' }}>
         {([
           { label: 'Total de Orçamentos', value: kpis.total, color: 'var(--accent)' },
           { label: 'Aceitos', value: kpis.aceitos, color: '#10b981' },
@@ -126,7 +126,7 @@ export default function DashboardPage() {
           Sem dados ainda. Salve orçamentos para ver os gráficos.
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: '20px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%,380px), 1fr))', gap: '16px' }}>
 
           {/* Chart 1: Orçamentos por mês */}
           <div className="card" style={{ padding: '20px', margin: 0 }}>
@@ -237,7 +237,7 @@ export default function DashboardPage() {
       )}
 
       {/* Clientes KPI extras */}
-      <div style={{ marginTop: '20px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px' }}>
+      <div style={{ marginTop: '16px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '12px' }}>
         <div className="card" style={{ padding: '16px', margin: 0 }}>
           <div style={{ fontSize: '10px', color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>Total Clientes</div>
           <div style={{ fontSize: '22px', fontWeight: 800, color: 'var(--accent)', fontFamily: 'var(--mono)' }}>{clientes.length}</div>

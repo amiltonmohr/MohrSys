@@ -4,104 +4,86 @@ description: "MohrSys SaaS - sistema de orçamento para gráficas offset, multi-
 metadata: 
   node_type: memory
   type: project
-  originSessionId: f4aa2509-ebfa-4a9a-bf17-3e1f75187821
+  originSessionId: f2c77630-3c1c-43ad-82e8-daa6c46ff264
 ---
 
 Sistema de orçamento para gráficas offset — plataforma SaaS multi-tenant vendível.
 
 **Repositório:** github.com/amiltonmohr/MohrSys (acesso via SSH)
-**HTML de referência:** C:\Users\Amilton\Documents\MohrSys\offsetcalc_5.html (design e lógica originais que devem ser replicados 100%)
+**HTML de referência:** offsetcalc_5.html (design e lógica originais — 3778 linhas, base da integração)
 
-## Stack
-- Frontend: React 18 + TypeScript + Vite (porta 5173) — SEM Tailwind, usa CSS puro com variáveis CSS
-- Backend: Node.js + Express + TypeScript (porta 3000, rodando com ts-node-dev)
-- DB: PostgreSQL 18 com RLS (Row-Level Security) para isolamento de tenants
-- Auth: JWT 15min + Refresh Token 7 dias
-- UI server em prod: Express server.mjs servindo /dist
+## Stack Atual (pós feat/api-integration)
+- Frontend: **HTML puro + JS vanilla** (sem React, sem Vite) — arquivo único `offsetcalc-ui/index.html` (~4256 linhas)
+- UI server: nginx:alpine servindo o HTML + proxy /api → container API
+- Backend: Node.js + Express + TypeScript (porta 3000)
+- DB: PostgreSQL 16 com RLS (Row-Level Security)
+- Auth: JWT 15min + Refresh Token 7 dias (armazenados em sessionStorage)
+- Cache: Redis 7
 
-## Estrutura WSL (projeto rodando)
-- Projeto em: /home/amilton/mohrsys/
-- API em: /home/amilton/mohrsys/offsetcalc-api/
-- UI em: /home/amilton/mohrsys/offsetcalc-ui/
-- Acesso: http://localhost:5173/app.html
-- Usuario dev: admin@mohr.com / Admin@123
+## Estrutura Docker (ambiente pronto)
+- `docker compose up --build -d` sobe tudo: postgres + redis + api + ui
+- UI em http://localhost:5173 — nginx serve HTML e proxia /api → container api
+- API em http://localhost:3000 — healthcheck em /health
+- Credenciais: admin@mohr.com / Admin@123
 
-## Arquitetura de Dados (decisão de design)
-- Config: localStorage + API sync (GET/PUT /api/v1/config)
-- Clientes: localStorage + React state (AppContext)
-- Histórico de orçamentos: localStorage + React state (AppContext)
-- Cálculo: **roda client-side** usando config carregada — sem lag de rede
-- Persistência API: opcional/eventual, funciona offline
+## Arquitetura de Dados (implementada)
+- Config: API `GET/PUT /api/v1/config` — mapeamento campos API↔frontend documentado abaixo
+- Clientes: API `GET/POST/PUT/DELETE /api/v1/clients`
+- Histórico de orçamentos: API `GET/POST/PUT/DELETE /api/v1/quotes`
+- Cálculo: **roda 100% client-side** — sem latência de rede
+- `raw_entry`: campo JSONB na tabela quotes para restauração fiel dos orçamentos no frontend
+- Extras de config (imposto, CI breakdown, colsOrc): `localStorage` key `ms_cfg_extras`
+- Tokens JWT: `sessionStorage` keys `ms_jwt` e `ms_refresh`
+
+## Mapeamento de campos crítico
+
+### Config API → Frontend
+| API | Frontend |
+|-----|---------|
+| `materials` | `papeis` |
+| `machines` | `maquinas` |
+| `finishing` | `acabamentos` |
+| `chapa_cost_brl` | `chapaCusto` |
+| `ink_cost_cmyk_per_ml` | `tintaCmyk` |
+| `labor_cost_per_hour_brl` | `ciPorHora` |
+
+### Clientes API → Frontend
+| API | Frontend |
+|-----|---------|
+| `name` | `nome` |
+| `phone` | `tel` |
+| `address` | `rua`+`num`+`bairro` |
+| `city` | `cidade` |
+| `state` | `estado` |
+| `zip_code` | `cep` |
+| `notes` | `obs` |
+
+## Integração Frontend (index.html)
+- **Login overlay**: exibido ao iniciar, some após auth bem-sucedida
+- **`initApp()`**: carrega dados via API, renderiza tudo
+- **`loadData()`**: GET /api/v1/config + GET /api/v1/quotes?limit=500
+- **`salvarOrcamento()`**: POST/PUT /api/v1/quotes com raw_entry completo
+- **`salvarCliente()`**: POST/PUT /api/v1/clients
+- **`salvarConfig()`**: PUT /api/v1/config (fire-and-forget)
+- **Mobile**: CSS responsivo com breakpoints 1100/768/480px + hambúrguer
+
+## Backend — raw_entry
+- `QuoteService.ts`: INSERT/UPDATE com raw_entry como JSONB
+- `validation.ts`: `raw_entry: Joi.object().unknown(true).allow(null)`
+- `types/index.ts`: `raw_entry?: Record<string, unknown> | null` em QuoteInput
+- Migration: `ALTER TABLE quotes ADD COLUMN IF NOT EXISTS raw_entry JSONB`
+
+## VM de Produção (OCI Oracle Cloud — sa-saopaulo-1)
+- IP: 163.176.140.220
+- OCID: ocid1.instance.oc1.sa-saopaulo-1.antxeljrz5upguicx6cn2bml54gll6xgznw5sj5fjwg5wztnvhnoaiu4raua
+- Domínio: mohrsys.novusti.com.br (Cloudflare)
+- **Status deploy:** pendente — imagens Docker criadas localmente, deploy ainda não realizado
+- OCI CLI configurado em /home/ismael/.oci/config (chave API em Downloads)
 
 ## Branch ativa de desenvolvimento
 - **Nunca commitar direto na main** — sempre via feature/ ou fix/
-- Último merge: feature/docker-deploy-fix → main (2026-05-21)
+- Branch atual: feat/api-integration → merge para main via PR
 
-## Docker (ambiente pronto e testado — 2026-05-21)
-- `docker compose up --build -d` sobe tudo: postgres + redis + api + ui
-- UI em http://localhost:5173 — nginx serve SPA e proxia /api → container api
-- API em http://localhost:3000 — healthcheck em /health
-- Credenciais: admin@mohr.com / Admin@123
-- **Problema resolvido:** `puppeteer` removido do package.json (causava timeout no build)
-- **Problema resolvido:** `bcrypt` → `bcryptjs` (sem compilação nativa no Alpine)
-- **Problema resolvido:** LoginPage reescrita sem Tailwind/react-hook-form/react-router
-- **Problema resolvido:** App.tsx usava window.location.href='/' → loop infinito; agora usa estado React
-- **Problema resolvido:** Router.tsx (scaffolding morto) removido
-- **Hash correto gerado:** bcryptjs.hash('Admin@123',10) → atualizado no DB e migration
-
-## Progresso de implementação (atualizado 2026-05-20)
-
-### ✅ TUDO CONCLUÍDO (na main — commit ad52556)
-
-1. **`src/utils/calculator.ts`** — Engine de cálculo completa
-   - ATENÇÃO: propriedade `tiраgemInput` usa Cirílicos (р=U+0440, а=U+0430) — copiar bytes ao usar
-
-2. **`src/context/AppContext.tsx`** — Context global (localStorage + sync API)
-
-3. **`src/App.tsx`** — Navegação 5 abas + logo SVG MOHR
-
-4. **`src/index.css`** — CSS completo
-
-5. Backend API completo (auth, quotes, clients, config, dashboard)
-
-6. **`src/pages/CalculoPage.tsx`** — COMPLETA, cálculo 100% client-side
-   - 3 modos: Simples / Bloco / Revista
-   - Presets, formato dinâmico, tira/retira, modal acabamentos com parâmetros
-   - Comparativo 6 tiragens, autocomplete cliente, salvar → histórico
-   - useEffect on mount: lê `mohrsys_goto_cliente` do localStorage para pré-preencher cliente
-
-7. **`src/pages/ConfigPage.tsx`** — COMPLETA, 5 abas, edição inline
-   - Papéis: CRUD, tabela editável inline
-   - Máquinas: CRUD (nome/formato/R$hora/velocidade/pinça)
-   - Acabamentos: CRUD com parâmetros dinâmicos por fórmula
-   - Chapas & Tintas: custo chapa, setup, CMYK/Pantone/UV
-   - Custos Indiretos: aluguel/energia/manutenção/outros → ciPorHora automático
-   - Banner "não salvo", modal confirmação reset, Restaurar Padrão
-
-8. **`src/pages/ClientesPage.tsx`** — COMPLETA
-   - KPIs: total e cadastrados nos últimos 30 dias
-   - Busca/filtro useMemo, edição inline Enter/Escape, modal exclusão
-   - "→ Orçamento": salva nome em localStorage('mohrsys_goto_cliente') + onGoTo('orcamento')
-
-9. **`src/pages/HistoricoPage.tsx`** — COMPLETA
-   - gerarOP(): HTML completo Ordem de Produção, window.open + print on load
-   - gerarProposta(): proposta formal para cliente (sem custos internos)
-   - KPIs: total, aprovados, valor aprovado, taxa de conversão
-   - Filtro busca + status; duplicar, editar status inline, aprovar toggle, excluir modal
-
-10. **`src/pages/DashboardPage.tsx`** — COMPLETA (recharts, 100% client-side)
-    - 6 KPIs do AppContext: total, aceitos, valor aceito, taxa conversão, 30 dias, ticket médio
-    - BarChart: orçamentos por mês (últimos 6 meses)
-    - PieChart: distribuição por status (rascunho/enviado/aceito/recusado)
-    - BarChart horizontal: top 5 clientes por valor total
-    - AreaChart: receita mensal com gradiente
-
-## Módulos do HTML original que DEVEM estar no front (100% fiel)
-1. **Cálculo** — layout 3 colunas; tipos simples/bloco/revista; presets; formato-impressão dinâmico; tira/retira; modal de acabamentos com parâmetros; comparativo de tiragens; salvar orçamento ✅
-2. **Clientes** — cadastro nome+tel; busca; dropdown autocomplete no orçamento; "→ Orçamento" ✅
-3. **Configurações** — tabela papéis editável; chapas; tintas; máquinas; acabamentos; custos indiretos ✅
-4. **Orçamentos** — lista; aprovar; OP (HTML para nova janela); PDF/Proposta; editar; duplicar ✅
-5. **Dashboard** — 6 KPIs; 4 gráficos recharts (barras, doughnut, horizontal, área) ✅
-
-**Why:** O HTML original (offsetcalc_5.html) é o produto funcional validado com cliente — a migração para React deve ser 100% fiel em design e funcionalidade.
-**How to apply:** Sempre comparar qualquer página com o HTML antes de considerar pronto. A lógica de cálculo em calculator.ts deve produzir os mesmos resultados que o HTML.
+## Atenção: Cyrílicos em tiраgemInput
+- Propriedade `tiраgemInput` em ComparisonQuantity usa caracteres cirílicos (р=U+0440, а=U+0430)
+- SEMPRE copiar os bytes diretamente, nunca redigitar
