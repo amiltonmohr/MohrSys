@@ -121,7 +121,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const addOrcamento = useCallback((entry: Omit<OrcamentoEntry, 'id' | 'ts' | 'aprovado'>) => {
-    const full: OrcamentoEntry = { ...entry, id: Date.now().toString(), ts: Date.now(), aprovado: false };
+    const full = { ...entry, id: Date.now().toString(), ts: Date.now(), aprovado: false } as OrcamentoEntry;
     setHistorico(prev => [full, ...prev]);
   }, []);
 

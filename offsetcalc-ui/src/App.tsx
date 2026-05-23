@@ -5,6 +5,7 @@ import ClientesPage from './pages/ClientesPage';
 import ConfigPage from './pages/ConfigPage';
 import HistoricoPage from './pages/HistoricoPage';
 import DashboardPage from './pages/DashboardPage';
+import LoginPage from './pages/LoginPage';
 import './index.css';
 
 const LOGO_SVG = (
@@ -20,14 +21,14 @@ const LOGO_SVG = (
 
 type Secao = 'orcamento' | 'clientes' | 'config' | 'historico' | 'dashboard';
 
-function AppInner() {
+function AppInner({ setLoggedIn }: { setLoggedIn: (v: boolean) => void }) {
   const [secao, setSecao] = useState<Secao>('orcamento');
   const { toastMsg } = useApp();
 
   const logout = () => {
     localStorage.removeItem('access_token');
     localStorage.removeItem('refresh_token');
-    window.location.href = '/';
+    setLoggedIn(false);
   };
 
   const tabs: { id: Secao; label: string }[] = [
@@ -52,7 +53,7 @@ function AppInner() {
               </button>
             ))}
           </div>
-          <button className="nav-tab" onClick={logout} style={{ color: 'rgba(255,180,180,0.8)', flexShrink: 0 }}>
+          <button className="nav-tab" onClick={() => logout()} style={{ color: 'rgba(244,114,182,.8)', flexShrink: 0 }}>
             Sair
           </button>
         </div>
@@ -74,14 +75,15 @@ function AppInner() {
 }
 
 export default function App() {
-  const token = localStorage.getItem('access_token');
-  if (!token) {
-    window.location.href = '/';
-    return null;
+  const [loggedIn, setLoggedIn] = useState(!!localStorage.getItem('access_token'));
+
+  if (!loggedIn) {
+    return <LoginPage onLogin={() => setLoggedIn(true)} />;
   }
+
   return (
     <AppProvider>
-      <AppInner />
+      <AppInner setLoggedIn={setLoggedIn} />
     </AppProvider>
   );
 }

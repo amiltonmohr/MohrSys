@@ -1,15 +1,12 @@
 version: '3.9'
 
 services:
-  # ── PostgreSQL ──────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: offsetcalc
       POSTGRES_PASSWORD: offsetcalc123
       POSTGRES_DB: offsetcalc
-    ports:
-      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./offsetcalc-api/src/db/migrations:/docker-entrypoint-initdb.d:ro
@@ -19,11 +16,8 @@ services:
       timeout: 5s
       retries: 5
 
-  # ── Redis ───────────────────────────────────────────────────
   redis:
     image: redis:7-alpine
-    ports:
-      - "6379:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -32,25 +26,22 @@ services:
       timeout: 3s
       retries: 5
 
-  # ── API ─────────────────────────────────────────────────────
   api:
     build:
       context: ./offsetcalc-api
       dockerfile: Dockerfile
-    ports:
-      - "3000:3000"
     environment:
-      NODE_ENV: development
+      NODE_ENV: production
       DATABASE_URL: postgresql://offsetcalc:offsetcalc123@postgres:5432/offsetcalc
       REDIS_URL: redis://redis:6379
-      JWT_SECRET: dev-jwt-secret-key-minimum-32-characters
+      JWT_SECRET: prod-mohrsys-jwt-secret-xk9q2p8v3n7m1r5t
       JWT_EXPIRY: 900
-      REFRESH_TOKEN_SECRET: dev-refresh-secret-key-minimum-32-chars
+      REFRESH_TOKEN_SECRET: prod-mohrsys-refresh-secret-w6y4u2i8o3e1a5s
       REFRESH_TOKEN_EXPIRY: 604800
       PORT: 3000
       API_VERSION: v1
-      CORS_ORIGINS: http://localhost:5173,http://localhost:3000
-      LOG_LEVEL: debug
+      CORS_ORIGINS: https://mohrsys.novusti.com.br,http://mohrsys.novusti.com.br
+      LOG_LEVEL: info
     depends_on:
       postgres:
         condition: service_healthy
@@ -62,13 +53,14 @@ services:
       timeout: 5s
       retries: 5
 
-  # ── Frontend ────────────────────────────────────────────────
   ui:
     build:
       context: ./offsetcalc-ui
       dockerfile: Dockerfile
+      args:
+        VITE_API_URL: /api/v1
     ports:
-      - "5173:80"
+      - "80:80"
     depends_on:
       api:
         condition: service_healthy

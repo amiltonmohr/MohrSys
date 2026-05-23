@@ -72,6 +72,7 @@ export const quoteInputSchema = Joi.object({
   rev_capa_finishing: Joi.array().default([]),
   tira_retira: Joi.boolean().default(true),
   comparison_quantities: Joi.array().items(Joi.number().integer().positive()).max(5).default([]),
+  raw_entry: Joi.object().unknown(true).allow(null),
 });
 
 export const configUpdateSchema = Joi.object({
