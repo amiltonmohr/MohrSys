@@ -41,7 +41,7 @@ function mkInput(
 }
 
 export default function CalculoPage({ onGoTo, editEntry, onEditClear }: Props) {
-  const { config, clientes, addOrcamento, updateOrcamento, toast } = useApp();
+  const { config, clientes, historico, addOrcamento, updateOrcamento, toast } = useApp();
 
   // ── Identificação ────────────────────────────────────────────────────────
   const [jobRef, setJobRef] = useState('');
@@ -115,6 +115,15 @@ export default function CalculoPage({ onGoTo, editEntry, onEditClear }: Props) {
   const editApplied = useRef<string | null>(null);
 
   // ── Derived ───────────────────────────────────────────────────────────────
+  const autoJobRef = useMemo(() => {
+    let max = 0;
+    historico.forEach(h => {
+      const n = parseInt((h.ref || '').replace(/\D/g, ''));
+      if (!isNaN(n) && n > max) max = n;
+    });
+    return String(max + 1).padStart(5, '0');
+  }, [historico]);
+
   const papeisTipos = useMemo(() => [...new Set(config.papeis.map(p => p.tipo))], [config.papeis]);
 
   const gramaturasDisponiveis = useMemo(
@@ -265,7 +274,7 @@ export default function CalculoPage({ onGoTo, editEntry, onEditClear }: Props) {
 
   const handleSalvar = () => {
     if (!resultado) return;
-    const ref = jobRef || `ORC-${Date.now()}`;
+    const ref = editingId ? jobRef : autoJobRef;
     const entry = {
       ref,
       cliente: clienteNome,
@@ -442,9 +451,11 @@ export default function CalculoPage({ onGoTo, editEntry, onEditClear }: Props) {
           <div className="card">
             <div className="card-title">Identificação</div>
 
-            <div className="field">
-              <label>Número / Referência</label>
-              <input type="text" value={jobRef} onChange={e => setJobRef(e.target.value)} placeholder="ORC-2025-001" />
+            <div className="field" style={{ display: 'flex', alignItems: 'baseline', gap: '10px', marginBottom: '12px' }}>
+              <label style={{ margin: 0, whiteSpace: 'nowrap' }}>Número</label>
+              <span style={{ fontFamily: 'var(--mono)', fontSize: '16px', fontWeight: 700, color: 'var(--accent)', letterSpacing: '.5px' }}>
+                #{editingId ? jobRef : autoJobRef}
+              </span>
             </div>
 
             <div className="field" style={{ position: 'relative' }}>
@@ -517,6 +528,26 @@ export default function CalculoPage({ onGoTo, editEntry, onEditClear }: Props) {
                 </div>
               </div>
             )}
+
+            <div className="field">
+              <label>Descrição do Produto</label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type="text"
+                  value={desc}
+                  onChange={e => { setDesc(e.target.value); setDescManual(true); }}
+                  placeholder="Gerado automaticamente..."
+                />
+                {descManual && desc && (
+                  <button
+                    onClick={() => { setDescManual(false); handleCalcular(); }}
+                    title="Voltar para descrição automática"
+                    style={{ position: 'absolute', right: '6px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent2)', fontSize: '11px', fontFamily: 'var(--mono)', display: 'flex', alignItems: 'center', gap: '3px', padding: '2px 4px' }}>
+                    ↺ auto
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
 
           {/* Bloco params */}
@@ -742,20 +773,26 @@ export default function CalculoPage({ onGoTo, editEntry, onEditClear }: Props) {
               </div>
             </div>
 
+          </div>
+
+          <div className="card" style={{ marginTop: '0' }}>
+            <div className="card-title">Acabamentos</div>
             <div className="field">
-              <label>Acabamentos</label>
-              <button className="btn btn-secondary" style={{ width: '100%' }}
-                onClick={() => setShowAcabModal(true)}>
-                {acabSelecionados.length === 0
-                  ? '+ Selecionar Acabamentos'
-                  : `${acabSelecionados.length} acabamento(s) — clique para editar`}
+              <label>Selecionar Acabamentos</label>
+              <button
+                onClick={() => setShowAcabModal(true)}
+                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: '6px', padding: '8px 10px', cursor: 'pointer', fontFamily: 'var(--mono)', fontSize: '13px', transition: 'border-color .2s', color: acabSelecionados.length === 0 ? 'var(--text2)' : 'var(--text)' }}>
+                <span>{acabSelecionados.length === 0 ? 'Nenhum acabamento selecionado' : `${acabSelecionados.length} acabamento(s) — clique para editar`}</span>
+                <span style={{ color: 'var(--accent)', fontSize: '16px', fontWeight: 700, lineHeight: 1 }}>+</span>
               </button>
-              {acabSelecionados.length > 0 && (
-                <div style={{ marginTop: '6px', fontSize: '11px', color: 'var(--text2)', lineHeight: '1.6' }}>
-                  {acabSelecionados.map(a => config.acabamentos[a.index]?.nome).join(' · ')}
-                </div>
-              )}
             </div>
+            {acabSelecionados.length > 0 && (
+              <div style={{ marginTop: '8px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                {acabSelecionados.map(a => (
+                  <span key={a.index} className="tag tag-teal">{config.acabamentos[a.index]?.nome}</span>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
@@ -890,45 +927,19 @@ export default function CalculoPage({ onGoTo, editEntry, onEditClear }: Props) {
                 )}
               </div>
 
-              {/* Descrição + Ações */}
-              <div style={{ marginTop: '12px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                  <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                    Descrição do Orçamento
-                  </label>
-                  {descManual && (
-                    <button
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent2)', fontSize: '11px', fontFamily: 'var(--mono)', display: 'flex', alignItems: 'center', gap: '3px', padding: '2px 4px' }}
-                      onClick={() => { setDescManual(false); handleCalcular(); }}
-                      title="Voltar para descrição automática">
-                      ↺ auto
-                    </button>
-                  )}
-                </div>
-                <input
-                  type="text"
-                  value={desc}
-                  onChange={e => { setDesc(e.target.value); setDescManual(true); }}
-                  placeholder="Gerado automaticamente após calcular..."
-                  style={{ width: '100%', fontSize: '12px', marginBottom: '12px' }}
-                />
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                  <button className="btn btn-primary" style={{ flex: 2, minWidth: '120px' }} onClick={handleSalvar}>
-                    {editingId ? 'Atualizar Orçamento' : 'Salvar Orçamento'}
-                  </button>
-                  <button className="btn btn-secondary" style={{ flex: 1 }} onClick={handleGerarProposta}>
-                    Proposta
-                  </button>
-                  <button className="btn btn-secondary" style={{ flex: 1 }} onClick={handleToggleComp}>
-                    {showComp ? 'Fechar' : 'Tiragens'}
-                  </button>
-                </div>
-                {editingId && (
-                  <div style={{ fontSize: '11px', color: '#f59e0b', textAlign: 'center', marginTop: '6px' }}>
-                    Modo edição — clique em "Limpar" para cancelar
-                  </div>
-                )}
+              {/* Ações */}
+              <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
+                <button className="btn btn-primary" style={{ flex: 1 }} onClick={handleSalvar}>
+                  {editingId ? 'Atualizar Orçamento' : 'Salvar Orçamento'}
+                </button>
+                <button className="btn btn-secondary" onClick={handleGerarProposta}>Proposta</button>
+                <button className="btn btn-secondary" onClick={handleToggleComp}>{showComp ? 'Fechar' : 'Tiragens'}</button>
               </div>
+              {editingId && (
+                <div style={{ fontSize: '11px', color: '#f59e0b', textAlign: 'center', marginTop: '6px' }}>
+                  Modo edição — clique em "Limpar" para cancelar
+                </div>
+              )}
 
               {/* Comparativo de Tiragens */}
               {showComp && comparativo.length > 0 && (
