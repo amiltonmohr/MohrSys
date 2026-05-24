@@ -53,8 +53,12 @@ jobs:
 
       - name: Restart stack on VM
         run: |
-          ssh -i ~/.ssh/id_deploy ubuntu@163.176.140.220 \
-            'cd ~/MohrSys && docker compose -f docker-compose.deploy.yml -p mohrsys up -d --no-build --force-recreate --remove-orphans'
+          ssh -i ~/.ssh/id_deploy ubuntu@163.176.140.220 '
+            docker stop mohrsys-api-1 mohrsys-ui-1 2>/dev/null || true
+            docker rm   mohrsys-api-1 mohrsys-ui-1 2>/dev/null || true
+            cd ~/MohrSys
+            docker compose -f docker-compose.deploy.yml -p mohrsys up -d --no-build --remove-orphans
+          '
 
       - name: Health check
         run: |
