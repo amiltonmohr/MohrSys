@@ -808,7 +808,7 @@ export default function CalculoPage({ onGoTo, editEntry, onEditClear }: Props) {
               <div className="result-section" style={{ marginTop: '12px' }}>
                 <div className="result-title">Resultado</div>
 
-                <div className="result-grid" style={{ gridTemplateColumns: 'repeat(3,1fr)' }}>
+                <div className="result-grid">
                   <div className="result-item">
                     <div className="result-item-label">Custo (s/margem)</div>
                     <div className="result-item-value">R$ {resultado.subtotal.toFixed(2)}</div>
