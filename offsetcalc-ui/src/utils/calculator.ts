@@ -573,11 +573,12 @@ export function calcular(input: CalculatorInput, cfg: AppConfig): CalculatorResu
 
 export const configDefault: AppConfig = {
   papeis: [
-    { tipo: 'Couchê',        gramatura: '90g',  formato: '66x96cm', precoPorKg: 12.00, fatorAbs: 1.0 },
-    { tipo: 'Couchê',        gramatura: '115g', formato: '66x96cm', precoPorKg: 12.00, fatorAbs: 1.0 },
-    { tipo: 'Couchê',        gramatura: '150g', formato: '66x96cm', precoPorKg: 12.00, fatorAbs: 1.0 },
-    { tipo: 'Couchê',        gramatura: '250g', formato: '66x96cm', precoPorKg: 12.00, fatorAbs: 1.0 },
-    { tipo: 'Couchê',        gramatura: '300g', formato: '66x96cm', precoPorKg: 12.00, fatorAbs: 1.0 },
+    { tipo: 'Couchê Brilho', gramatura: '90g',  formato: '66x96cm', precoPorKg: 12.00, fatorAbs: 1.0 },
+    { tipo: 'Couchê Brilho', gramatura: '115g', formato: '66x96cm', precoPorKg: 12.00, fatorAbs: 1.0 },
+    { tipo: 'Couchê Brilho', gramatura: '150g', formato: '66x96cm', precoPorKg: 12.00, fatorAbs: 1.0 },
+    { tipo: 'Couchê Brilho', gramatura: '170g', formato: '66x96cm', precoPorKg: 12.00, fatorAbs: 1.0 },
+    { tipo: 'Couchê Brilho', gramatura: '250g', formato: '66x96cm', precoPorKg: 12.00, fatorAbs: 1.0 },
+    { tipo: 'Couchê Brilho', gramatura: '300g', formato: '66x96cm', precoPorKg: 12.00, fatorAbs: 1.0 },
     { tipo: 'Couchê Fosco',  gramatura: '90g',  formato: '66x96cm', precoPorKg: 12.00, fatorAbs: 1.0 },
     { tipo: 'Couchê Fosco',  gramatura: '115g', formato: '66x96cm', precoPorKg: 12.00, fatorAbs: 1.0 },
     { tipo: 'Couchê Fosco',  gramatura: '150g', formato: '66x96cm', precoPorKg: 12.00, fatorAbs: 1.0 },
