@@ -1,5 +1,5 @@
 # Memory Index
 
-- [MohrSys Project](project_mohrsys.md) — SaaS de orçamento gráfico: stack, estado atual, progresso, arquivos criados, pendências
-- [Usuário Amilton](user_amilton.md) — empreendedor gráfico, desenvolve MohrSys, usa WSL+Windows, Claude Code como parceiro principal
-- [Feedback: Commits](feedback_commits.md) — commits sempre via feature/fix branch, nunca direto na main; memória vai para o GitHub
+- [MohrSys Project](project_mohrsys.md) — React+TS+Vite, localStorage, deploy VM OCI ativo, UI idêntica ao HTML de referência (PRs #10 #11)
+- [Usuário Amilton](user_amilton.md) — empreendedor gráfico, dono do MohrSys, WSL2+Windows, Claude Code como parceiro principal, pt-BR
+- [Feedback: Commits e Deploy](feedback_commits.md) — nunca na main, build SEMPRE local (VM tem 1GB RAM), memória vai para o GitHub
