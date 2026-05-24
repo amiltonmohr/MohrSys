@@ -21,7 +21,9 @@ rsync -az --delete -e "ssh -i $SSH_KEY -o StrictHostKeyChecking=no" \
 echo "🐳 Copiando para container..."
 ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$VM" "
   docker cp /tmp/ui_dist/index.html $CONTAINER:/usr/share/nginx/html/index.html &&
-  docker cp /tmp/ui_dist/assets     $CONTAINER:/usr/share/nginx/html/ &&
+  docker exec $CONTAINER rm -rf /usr/share/nginx/html/assets &&
+  docker exec $CONTAINER mkdir -p /usr/share/nginx/html/assets &&
+  docker cp /tmp/ui_dist/assets/. $CONTAINER:/usr/share/nginx/html/assets/ &&
   docker exec $CONTAINER nginx -s reload
 "
 
