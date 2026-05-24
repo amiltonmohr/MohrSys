@@ -81,7 +81,7 @@ function AppInner({ setLoggedIn }: { setLoggedIn: (v: boolean) => void }) {
       )}
 
       <footer style={{ textAlign: 'center', padding: '16px 32px', fontFamily: 'var(--mono)', fontSize: '11px', color: 'var(--text3)', borderTop: '1px solid var(--border)', marginTop: '8px' }}>
-        V1.0 · Todos os direitos reservados · MOHR/SYS · Brasil
+        v{__APP_VERSION__} · Todos os direitos reservados · MOHR/SYS · Brasil
       </footer>
     </div>
   );
