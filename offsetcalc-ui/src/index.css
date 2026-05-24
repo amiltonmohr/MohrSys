@@ -11,7 +11,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
 
 /* ── HEADER ───────────────────────────────────────────────── */
 .header{background:var(--accent);border-bottom:none;padding:0;height:56px;position:sticky;top:0;z-index:100;box-shadow:0 2px 12px rgba(124,58,237,.25)}
-.header-inner{max-width:1600px;margin:0 auto;padding:0 32px;display:grid;grid-template-columns:minmax(280px,340px) minmax(0,1fr) minmax(0,auto);gap:20px;align-items:center;height:100%}
+.header-inner{max-width:1600px;margin:0 auto;padding:0 32px;display:grid;grid-template-columns:minmax(280px,340px) minmax(0,1fr) minmax(0,1.5fr);gap:20px;align-items:center;height:100%}
 .logo{font-family:var(--display);font-size:18px;font-weight:800;display:flex;align-items:center;gap:10px;color:#fff}
 .logo-dot{width:8px;height:8px;background:var(--accent2);border-radius:50%}
 .logo span{color:var(--accent2)}

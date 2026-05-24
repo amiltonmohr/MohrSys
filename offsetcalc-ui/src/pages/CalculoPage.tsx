@@ -488,14 +488,19 @@ export default function CalculoPage({ onGoTo, editEntry, onEditClear }: Props) {
 
             <div className="field">
               <label>Tipo de Material</label>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '6px' }}>
-                {(['simples', 'bloco', 'revista'] as const).map(tipo => (
-                  <button key={tipo}
-                    className={`btn ${tipoAtivo === tipo ? 'btn-primary' : 'btn-secondary'}`}
-                    style={{ padding: '8px 4px', fontSize: '11px', fontWeight: 700 }}
-                    onClick={() => setTipoAtivo(tipo)}>
-                    {tipo === 'simples' ? 'Simples' : tipo === 'bloco' ? 'Bloco' : 'Revista'}
-                  </button>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '8px', marginBottom: '4px' }}>
+                {[
+                  { id: 'simples', icon: '🖨', nome: 'Impressão Simples', desc: 'Folder, cartão, folheto, timbrado' },
+                  { id: 'bloco',   icon: '📋', nome: 'Bloco',             desc: 'Pedido, recibo, nota, formulário' },
+                  { id: 'revista', icon: '📖', nome: 'Revista / Catálogo', desc: 'Revista, catálogo, apostila' },
+                ].map(tipo => (
+                  <div key={tipo.id}
+                    className={`tipo-material-card${tipoAtivo === tipo.id ? ' active' : ''}`}
+                    onClick={() => setTipoAtivo(tipo.id as 'simples' | 'bloco' | 'revista')}>
+                    <div className="tipo-material-icon">{tipo.icon}</div>
+                    <div className="tipo-material-nome">{tipo.nome}</div>
+                    <div className="tipo-material-desc">{tipo.desc}</div>
+                  </div>
                 ))}
               </div>
             </div>
@@ -755,7 +760,7 @@ export default function CalculoPage({ onGoTo, editEntry, onEditClear }: Props) {
         </div>
 
         {/* ══ COLUNA 3 — Parâmetros e Resultado ══════════════════════════════ */}
-        <div className="sticky-panel">
+        <div>
           <div className="card">
             <div className="card-title">Parâmetros Operacionais</div>
 
@@ -803,110 +808,111 @@ export default function CalculoPage({ onGoTo, editEntry, onEditClear }: Props) {
               <div className="result-section" style={{ marginTop: '12px' }}>
                 <div className="result-title">Resultado</div>
 
-                {/* Total em destaque */}
-                <div style={{ textAlign: 'center', padding: '20px 0 16px', borderBottom: '1px solid rgba(255,255,255,.08)' }}>
-                  <div style={{ fontSize: '10px', color: 'rgba(167,139,250,.7)', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '8px' }}>
-                    Total do Orçamento
+                <div className="result-grid" style={{ gridTemplateColumns: 'repeat(3,1fr)' }}>
+                  <div className="result-item">
+                    <div className="result-item-label">Custo (s/margem)</div>
+                    <div className="result-item-value">R$ {resultado.subtotal.toFixed(2)}</div>
                   </div>
-                  <div className="grad-text" style={{ fontSize: '36px', fontWeight: 900, lineHeight: 1.1 }}>
-                    R$ {resultado.total.toFixed(2)}
+                  <div className="result-item">
+                    <div className="result-item-label">Preço de Venda</div>
+                    <div className="result-item-value highlight">R$ {resultado.total.toFixed(2)}</div>
                   </div>
-                  <div style={{ fontSize: '13px', color: 'rgba(255,255,255,.5)', marginTop: '8px' }}>
-                    {resultado.unitarioLabel}:{' '}
-                    <strong style={{ color: '#34d399' }}>R$ {resultado.unitario.toFixed(4)}</strong>
+                  <div className="result-item">
+                    <div className="result-item-label">{resultado.unitarioLabel}</div>
+                    <div className="result-item-value green">R$ {resultado.unitario.toFixed(4)}</div>
                   </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '16px' }}>
+                  <span className="tag tag-yellow">
+                    {qty.toLocaleString('pt-BR')} {tipoAtivo === 'bloco' ? 'blocos' : tipoAtivo === 'revista' ? 'ex.' : 'un.'}
+                  </span>
+                  {tipoPapel && gramPapel && (
+                    <span className="tag tag-teal">{tipoPapel} {gramPapel}g</span>
+                  )}
+                  <span className="tag tag-yellow">{coresF}×{coresV} cores</span>
+                  {tiraNRetiraEnabled && <span className="tag tag-teal">Tira e Retira</span>}
+                  <span className="tag tag-yellow">{margemPct}% margem</span>
                   {resultado.urgPct > 0 && (
-                    <div style={{ fontSize: '11px', color: '#fbbf24', marginTop: '4px' }}>
-                      + {resultado.urgPct}% urgência = R$ {resultado.adUrgencia.toFixed(2)}
-                    </div>
+                    <span className="tag" style={{ background: 'rgba(251,191,36,.1)', color: '#d97706', border: '1px solid rgba(251,191,36,.3)' }}>
+                      +{resultado.urgPct}% urgência
+                    </span>
                   )}
                 </div>
 
-                {/* Breakdown de custos */}
-                <div style={{ padding: '12px 0' }}>
-                  <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>
-                    Composição de Custo
-                  </div>
-                  {([
-                    ['Papel', resultado.custoPapel],
-                    ['Chapas', resultado.custoChapas],
-                    ['Setup', resultado.custoSetup],
-                    ['Tinta', resultado.custoTinta],
-                    ['Máquina', resultado.custoMaquina],
-                    ['Custo Indireto', resultado.custoIndireto],
-                    ...(resultado.custoAcab > 0 ? [['Acabamentos', resultado.custoAcab]] : []),
-                  ] as [string, number][]).map(([label, val]) => (
-                    <div key={label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', padding: '3px 0', borderBottom: '1px solid var(--border)' }}>
-                      <span style={{ color: 'var(--text2)' }}>{label}</span>
-                      <span style={{ fontFamily: 'var(--mono)' }}>R$ {val.toFixed(2)}</span>
-                    </div>
-                  ))}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', padding: '6px 0', fontWeight: 700 }}>
-                    <span>Subtotal</span>
-                    <span style={{ fontFamily: 'var(--mono)' }}>R$ {resultado.subtotal.toFixed(2)}</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', padding: '2px 0', color: 'var(--accent)' }}>
-                    <span>Margem ({resultado.margemPct}%)</span>
-                    <span style={{ fontFamily: 'var(--mono)' }}>R$ {resultado.margem.toFixed(2)}</span>
-                  </div>
-                  {(config.imposto ?? 0) > 0 && (
-                    <>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', padding: '2px 0', color: '#fbbf24' }}>
-                        <span>Impostos ({config.imposto}%)</span>
-                        <span style={{ fontFamily: 'var(--mono)' }}>R$ {(resultado.total * config.imposto / 100).toFixed(2)}</span>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+                  <div className="result-breakdown">
+                    <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>Composição do Job</div>
+                    {resultado.jobLines.map((l: { label: string; value: string }, i: number) => (
+                      <div key={i} className="breakdown-row">
+                        <span className="breakdown-label">{l.label}</span>
+                        <span className="breakdown-value">{l.value}</span>
                       </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', padding: '6px 0', fontWeight: 800, borderTop: '2px solid var(--border)', color: '#f59e0b' }}>
-                        <span>Total com Impostos</span>
-                        <span style={{ fontFamily: 'var(--mono)' }}>R$ {(resultado.total * (1 + config.imposto / 100)).toFixed(2)}</span>
-                      </div>
-                    </>
-                  )}
-                </div>
-
-                {/* Detalhes técnicos */}
-                <div style={{ padding: '10px 0', borderTop: '1px solid var(--border)' }}>
-                  <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>
-                    Detalhes Técnicos
+                    ))}
                   </div>
-                  {resultado.jobLines.map((l, i) => (
-                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', padding: '2px 0', gap: '8px' }}>
-                      <span style={{ color: 'var(--text2)', flexShrink: 0 }}>{l.label}</span>
-                      <span style={{ fontFamily: 'var(--mono)', textAlign: 'right', fontSize: '10px' }}>{l.value}</span>
+                  <div className="result-breakdown">
+                    <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>Composição do Custo</div>
+                    {([
+                      ['Papel', resultado.custoPapel],
+                      ['Chapas', resultado.custoChapas],
+                      ['Setup', resultado.custoSetup],
+                      ['Tinta', resultado.custoTinta],
+                      ['Máquina', resultado.custoMaquina],
+                      ['Custo Indireto', resultado.custoIndireto],
+                      ...(resultado.custoAcab > 0 ? [['Acabamentos', resultado.custoAcab]] : []),
+                    ] as [string, number][]).map(([label, val]) => (
+                      <div key={label} className="breakdown-row">
+                        <span className="breakdown-label">{label}</span>
+                        <span className="breakdown-value">R$ {val.toFixed(2)}</span>
+                      </div>
+                    ))}
+                    <div className="breakdown-row">
+                      <span className="breakdown-label">Margem ({resultado.margemPct}%)</span>
+                      <span className="breakdown-value" style={{ color: 'var(--accent)' }}>R$ {resultado.margem.toFixed(2)}</span>
                     </div>
-                  ))}
-                  {resultado.acabSel.length > 0 && (
-                    <div style={{ marginTop: '6px', fontSize: '10px', color: 'var(--text2)' }}>
-                      {resultado.acabSel.map(a => `${a.nome}: R$ ${a.val.toFixed(2)}`).join(' · ')}
-                    </div>
-                  )}
-                </div>
-
-                {/* Descrição editável */}
-                <div style={{ padding: '10px 0', borderTop: '1px solid var(--border)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                    <label style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                      Descrição do Orçamento
-                    </label>
-                    {descManual && (
-                      <button
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent2)', fontSize: '11px', fontFamily: 'var(--mono)', display: 'flex', alignItems: 'center', gap: '3px', padding: '2px 4px' }}
-                        onClick={() => { setDescManual(false); handleCalcular(); }}
-                        title="Voltar para descrição automática">
-                        ↺ auto
-                      </button>
+                    {(config.imposto ?? 0) > 0 && (
+                      <div className="breakdown-row">
+                        <span className="breakdown-label">Impostos ({config.imposto}%)</span>
+                        <span className="breakdown-value" style={{ color: '#d97706' }}>R$ {(resultado.total * config.imposto / 100).toFixed(2)}</span>
+                      </div>
                     )}
+                    <div className="breakdown-row">
+                      <span className="breakdown-label">TOTAL</span>
+                      <span className="breakdown-value" style={{ color: 'var(--accent)', fontWeight: 700, fontSize: '13px' }}>R$ {resultado.total.toFixed(2)}</span>
+                    </div>
                   </div>
-                  <input
-                    type="text"
-                    value={desc}
-                    onChange={e => { setDesc(e.target.value); setDescManual(true); }}
-                    placeholder="Gerado automaticamente após calcular..."
-                    style={{ width: '100%', fontSize: '12px' }}
-                  />
                 </div>
 
-                {/* Ações */}
-                <div style={{ display: 'flex', gap: '8px', paddingTop: '12px', borderTop: '1px solid var(--border)', flexWrap: 'wrap' }}>
+                {resultado.acabSel.length > 0 && (
+                  <div style={{ fontSize: '11px', color: 'var(--text2)', marginBottom: '4px' }}>
+                    {resultado.acabSel.map((a: { nome: string; val: number }) => `${a.nome}: R$ ${a.val.toFixed(2)}`).join(' · ')}
+                  </div>
+                )}
+              </div>
+
+              {/* Descrição + Ações */}
+              <div style={{ marginTop: '12px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                  <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    Descrição do Orçamento
+                  </label>
+                  {descManual && (
+                    <button
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent2)', fontSize: '11px', fontFamily: 'var(--mono)', display: 'flex', alignItems: 'center', gap: '3px', padding: '2px 4px' }}
+                      onClick={() => { setDescManual(false); handleCalcular(); }}
+                      title="Voltar para descrição automática">
+                      ↺ auto
+                    </button>
+                  )}
+                </div>
+                <input
+                  type="text"
+                  value={desc}
+                  onChange={e => { setDesc(e.target.value); setDescManual(true); }}
+                  placeholder="Gerado automaticamente após calcular..."
+                  style={{ width: '100%', fontSize: '12px', marginBottom: '12px' }}
+                />
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                   <button className="btn btn-primary" style={{ flex: 2, minWidth: '120px' }} onClick={handleSalvar}>
                     {editingId ? 'Atualizar Orçamento' : 'Salvar Orçamento'}
                   </button>
