@@ -2,6 +2,16 @@ import { withTenantContext } from '../db/pool';
 import { TenantConfig } from '../types';
 import { logger } from '../utils/logger';
 
+const DEFAULT_FORMATOS = [
+  { nome: 'Formato 4',  w: 33,   h: 48,   div: '1/4' },
+  { nome: 'Formato 2',  w: 66,   h: 48,   div: '1/2' },
+  { nome: 'Formato 8',  w: 33,   h: 24,   div: '1/8' },
+  { nome: 'Formato 6',  w: 33,   h: 32,   div: '1/6' },
+  { nome: 'Formato 3',  w: 66,   h: 32,   div: '1/3' },
+  { nome: 'Inteiro',    w: 66,   h: 96,   div: '1'   },
+  { nome: 'Formato 16', w: 24,   h: 16.5, div: '1/16' },
+];
+
 const DEFAULT_CONFIG = {
   materials: [
     { tipo: 'Couchê', gramatura: '90g', formato: '66x96cm', precoPorKg: 12.00, fatorAbs: 1.0 },
@@ -52,6 +62,17 @@ const DEFAULT_CONFIG = {
   setup_cost_per_chapa_brl: 12.00,
   overhead_pct: 35.00,
   margin_pct: 30.00,
+  imposto_pct: 0,
+  ci_aluguel_brl: 0,
+  ci_energia_brl: 0,
+  ci_manutencao_brl: 0,
+  ci_outros_brl: 0,
+  ci_horas_mes: 176,
+  formatos: DEFAULT_FORMATOS,
+  tinta_cmyk_sg: 1.0,
+  tinta_uv_per_ml: 0.090,
+  tinta_uv_sg: 1.0,
+  tinta_pantone_sg: 1.0,
 };
 
 export class ConfigService {
@@ -67,16 +88,20 @@ export class ConfigService {
       // Auto-create default config for new tenants
       logger.info('Creating default config for tenant', { tenantId });
       const { rows: created } = await client.query<TenantConfig>(
-        `INSERT INTO configs (tenant_id, version, status, materials, machines, finishing,
+        `INSERT INTO configs (tenant_id, version, status, materials, machines, finishing, formatos,
           chapa_cost_brl, ink_cost_cmyk_per_ml, ink_cost_pantone_per_ml,
-          labor_cost_per_hour_brl, setup_cost_per_chapa_brl, overhead_pct, margin_pct, created_by)
-         VALUES ($1, 1, 'active', $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+          labor_cost_per_hour_brl, setup_cost_per_chapa_brl, overhead_pct, margin_pct,
+          imposto_pct, ci_aluguel_brl, ci_energia_brl, ci_manutencao_brl, ci_outros_brl, ci_horas_mes,
+          tinta_cmyk_sg, tinta_uv_per_ml, tinta_uv_sg, tinta_pantone_sg, created_by)
+         VALUES ($1, 1, 'active', $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
+                 $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
          RETURNING *`,
         [
           tenantId,
           JSON.stringify(DEFAULT_CONFIG.materials),
           JSON.stringify(DEFAULT_CONFIG.machines),
           JSON.stringify(DEFAULT_CONFIG.finishing),
+          JSON.stringify(DEFAULT_CONFIG.formatos),
           DEFAULT_CONFIG.chapa_cost_brl,
           DEFAULT_CONFIG.ink_cost_cmyk_per_ml,
           DEFAULT_CONFIG.ink_cost_pantone_per_ml,
@@ -84,6 +109,16 @@ export class ConfigService {
           DEFAULT_CONFIG.setup_cost_per_chapa_brl,
           DEFAULT_CONFIG.overhead_pct,
           DEFAULT_CONFIG.margin_pct,
+          DEFAULT_CONFIG.imposto_pct,
+          DEFAULT_CONFIG.ci_aluguel_brl,
+          DEFAULT_CONFIG.ci_energia_brl,
+          DEFAULT_CONFIG.ci_manutencao_brl,
+          DEFAULT_CONFIG.ci_outros_brl,
+          DEFAULT_CONFIG.ci_horas_mes,
+          DEFAULT_CONFIG.tinta_cmyk_sg,
+          DEFAULT_CONFIG.tinta_uv_per_ml,
+          DEFAULT_CONFIG.tinta_uv_sg,
+          DEFAULT_CONFIG.tinta_pantone_sg,
           userId,
         ]
       );
@@ -122,16 +157,20 @@ export class ConfigService {
 
       const merged = { ...currentConfig, ...updates };
       const { rows: created } = await client.query<TenantConfig>(
-        `INSERT INTO configs (tenant_id, version, status, materials, machines, finishing,
+        `INSERT INTO configs (tenant_id, version, status, materials, machines, finishing, formatos,
           chapa_cost_brl, ink_cost_cmyk_per_ml, ink_cost_pantone_per_ml,
-          labor_cost_per_hour_brl, setup_cost_per_chapa_brl, overhead_pct, margin_pct, created_by)
-         VALUES ($1, $2, 'active', $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+          labor_cost_per_hour_brl, setup_cost_per_chapa_brl, overhead_pct, margin_pct,
+          imposto_pct, ci_aluguel_brl, ci_energia_brl, ci_manutencao_brl, ci_outros_brl, ci_horas_mes,
+          tinta_cmyk_sg, tinta_uv_per_ml, tinta_uv_sg, tinta_pantone_sg, created_by)
+         VALUES ($1, $2, 'active', $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
+                 $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
          RETURNING *`,
         [
           tenantId, newVersion,
           JSON.stringify(merged.materials ?? DEFAULT_CONFIG.materials),
           JSON.stringify(merged.machines ?? DEFAULT_CONFIG.machines),
           JSON.stringify(merged.finishing ?? DEFAULT_CONFIG.finishing),
+          JSON.stringify(merged.formatos ?? DEFAULT_CONFIG.formatos),
           merged.chapa_cost_brl ?? DEFAULT_CONFIG.chapa_cost_brl,
           merged.ink_cost_cmyk_per_ml ?? DEFAULT_CONFIG.ink_cost_cmyk_per_ml,
           merged.ink_cost_pantone_per_ml ?? DEFAULT_CONFIG.ink_cost_pantone_per_ml,
@@ -139,6 +178,16 @@ export class ConfigService {
           merged.setup_cost_per_chapa_brl ?? DEFAULT_CONFIG.setup_cost_per_chapa_brl,
           merged.overhead_pct ?? DEFAULT_CONFIG.overhead_pct,
           merged.margin_pct ?? DEFAULT_CONFIG.margin_pct,
+          merged.imposto_pct ?? DEFAULT_CONFIG.imposto_pct,
+          merged.ci_aluguel_brl ?? DEFAULT_CONFIG.ci_aluguel_brl,
+          merged.ci_energia_brl ?? DEFAULT_CONFIG.ci_energia_brl,
+          merged.ci_manutencao_brl ?? DEFAULT_CONFIG.ci_manutencao_brl,
+          merged.ci_outros_brl ?? DEFAULT_CONFIG.ci_outros_brl,
+          merged.ci_horas_mes ?? DEFAULT_CONFIG.ci_horas_mes,
+          merged.tinta_cmyk_sg ?? DEFAULT_CONFIG.tinta_cmyk_sg,
+          merged.tinta_uv_per_ml ?? DEFAULT_CONFIG.tinta_uv_per_ml,
+          merged.tinta_uv_sg ?? DEFAULT_CONFIG.tinta_uv_sg,
+          merged.tinta_pantone_sg ?? DEFAULT_CONFIG.tinta_pantone_sg,
           userId,
         ]
       );

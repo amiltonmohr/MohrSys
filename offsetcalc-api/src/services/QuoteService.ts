@@ -360,6 +360,8 @@ export class QuoteService {
       const validUntil = new Date();
       validUntil.setDate(validUntil.getDate() + 7);
 
+      const prazo = input.raw_entry?.prazo ? new Date(input.raw_entry.prazo as string) : null;
+
       const { rows } = await client.query<Quote>(
         `INSERT INTO quotes (
           tenant_id, client_id, reference_number, description, product_type,
@@ -367,8 +369,8 @@ export class QuoteService {
           colors_front, colors_back, finishing_specs, num_sheets, num_plates,
           ink_per_color_ml, total_labor_hours, subtotal_brl, breakdown_items,
           total_brl, unit_price_brl, comparison_quantities, status, validity_days,
-          valid_until, created_by, raw_entry
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27)
+          valid_until, prazo, created_by, raw_entry
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28)
         RETURNING *`,
         [
           tenantId, input.client_id || null,
@@ -383,7 +385,7 @@ export class QuoteService {
           result.subtotal, JSON.stringify(result.breakdown_items),
           result.total, result.unitario,
           result.comparison_quantities ? JSON.stringify(result.comparison_quantities) : null,
-          'draft', 7, validUntil, userId,
+          'draft', 7, validUntil, prazo, userId,
           input.raw_entry ? JSON.stringify(input.raw_entry) : null,
         ]
       );
@@ -445,15 +447,23 @@ export class QuoteService {
 
   async update(tenantId: string, userId: string, quoteId: string, updates: Partial<Quote> & { raw_entry?: unknown }): Promise<Quote> {
     return withTenantContext(tenantId, userId, async (client) => {
+      const prazo = updates.raw_entry
+        ? ((updates.raw_entry as Record<string, unknown>)?.prazo
+            ? new Date((updates.raw_entry as Record<string, unknown>).prazo as string)
+            : null)
+        : undefined;
+
       const { rows } = await client.query<Quote>(
         `UPDATE quotes SET
            status = COALESCE($3, status),
            description = COALESCE($4, description),
            raw_entry = COALESCE($5, raw_entry),
+           prazo = COALESCE($6, prazo),
            updated_at = NOW()
          WHERE id = $1 AND tenant_id = $2 RETURNING *`,
         [quoteId, tenantId, updates.status, updates.description,
-         updates.raw_entry ? JSON.stringify(updates.raw_entry) : null]
+         updates.raw_entry ? JSON.stringify(updates.raw_entry) : null,
+         prazo ?? null]
       );
       if (!rows[0]) {
         throw Object.assign(new Error('Quote not found'), { status: 404, code: 'NOT_FOUND' });
