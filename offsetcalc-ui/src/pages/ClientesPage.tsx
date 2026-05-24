@@ -86,7 +86,6 @@ export default function ClientesPage({ onGoTo }: Props) {
   const [search, setSearch] = useState('');
   const [draft, setDraft] = useState<Draft>(emptyDraft());
   const [editId, setEditId] = useState<string | null>(null);
-  const [showForm, setShowForm] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [cepLoading, setCepLoading] = useState(false);
   const [cnpjLoading, setCnpjLoading] = useState(false);
@@ -96,37 +95,15 @@ export default function ClientesPage({ onGoTo }: Props) {
   const filtered = useMemo(() => {
     if (!search.trim()) return clientes;
     const q = search.toLowerCase();
+    const qNum = q.replace(/\D/g, '');
     return clientes.filter(c =>
       c.nome.toLowerCase().includes(q) ||
       (c.tel || '').includes(q) ||
-      (c.doc || '').replace(/\D/g, '').includes(q.replace(/\D/g, '')) ||
-      (c.cidade || '').toLowerCase().includes(q) ||
-      (c.email || '').toLowerCase().includes(q)
+      (qNum && (c.doc || '').replace(/\D/g, '').includes(qNum)) ||
+      (c.email || '').toLowerCase().includes(q) ||
+      (c.cidade || '').toLowerCase().includes(q)
     );
   }, [clientes, search]);
-
-  const recentes30 = useMemo(() => {
-    const corte = Date.now() - 30 * 24 * 60 * 60 * 1000;
-    return clientes.filter(c => c.ts > corte).length;
-  }, [clientes]);
-
-  const abrirNovoForm = () => {
-    setDraft(emptyDraft());
-    setEditId(null);
-    setShowForm(true);
-  };
-
-  const abrirEditForm = (c: Cliente) => {
-    setDraft({
-      nome: c.nome, tipo: c.tipo || 'pf', doc: c.doc || '', tel: c.tel || '',
-      email: c.email || '', cep: c.cep || '', uf: c.uf || 'SC',
-      rua: c.rua || '', num: c.num || '', bairro: c.bairro || '',
-      cidade: c.cidade || '', obs: c.obs || '',
-    });
-    setEditId(c.id);
-    setShowForm(true);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
 
   const handleSalvar = () => {
     if (!draft.nome.trim()) { toast('Informe o nome do cliente'); return; }
@@ -139,13 +116,11 @@ export default function ClientesPage({ onGoTo }: Props) {
     }
     setDraft(emptyDraft());
     setEditId(null);
-    setShowForm(false);
   };
 
   const handleCancel = () => {
     setDraft(emptyDraft());
     setEditId(null);
-    setShowForm(false);
   };
 
   const handleDelete = (id: string) => {
@@ -159,14 +134,25 @@ export default function ClientesPage({ onGoTo }: Props) {
     onGoTo('orcamento');
   };
 
+  const abrirEditForm = (c: Cliente) => {
+    setDraft({
+      nome: c.nome, tipo: c.tipo || 'pf', doc: c.doc || '', tel: c.tel || '',
+      email: c.email || '', cep: c.cep || '', uf: c.uf || 'SC',
+      rua: c.rua || '', num: c.num || '', bairro: c.bairro || '',
+      cidade: c.cidade || '', obs: c.obs || '',
+    });
+    setEditId(c.id);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const handleDocChange = async (v: string) => {
     const masked = maskDoc(v, draft.tipo || 'pf');
     set({ doc: masked });
     if (draft.tipo === 'pj' && masked.replace(/\D/g, '').length === 14) {
       setCnpjLoading(true);
-      toast('🔍 Buscando CNPJ...');
+      toast('Buscando CNPJ...');
       const dados = await buscarCnpj(masked);
-      if (dados) { set(dados); toast('✅ Dados preenchidos automaticamente!'); }
+      if (dados) { set(dados as Partial<Draft>); toast('Dados preenchidos automaticamente!'); }
       else toast('CNPJ não encontrado');
       setCnpjLoading(false);
     }
@@ -176,48 +162,32 @@ export default function ClientesPage({ onGoTo }: Props) {
     if (!draft.cep || draft.cep.replace(/\D/g, '').length !== 8) return;
     setCepLoading(true);
     const dados = await buscarCep(draft.cep);
-    if (dados) set(dados);
+    if (dados) set(dados as Partial<Draft>);
     setCepLoading(false);
   };
 
   return (
     <div className="section active">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
-        <h2 style={{ fontSize: '22px', fontWeight: 800 }}>
-          Cadastro de <span style={{ color: 'var(--accent)' }}>Clientes</span>
-        </h2>
-        {!showForm && (
-          <button className="btn btn-primary" onClick={abrirNovoForm}>+ Novo Cliente</button>
-        )}
+      <div className="section-header">
+        <h2>Cadastro de <span>Clientes</span></h2>
       </div>
 
-      {/* KPIs */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px,1fr))', gap: '12px', marginBottom: '20px' }}>
-        {[
-          { label: 'Total de Clientes', value: clientes.length, color: 'var(--accent)' },
-          { label: 'Cadastrados 30 dias', value: recentes30, color: '#10b981' },
-        ].map(k => (
-          <div key={k.label} className="card" style={{ padding: '16px', margin: 0 }}>
-            <div style={{ fontSize: '10px', color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>{k.label}</div>
-            <div style={{ fontSize: '28px', fontWeight: 800, color: k.color, fontFamily: 'var(--mono)' }}>{k.value}</div>
-          </div>
-        ))}
-      </div>
+      <div className="grid-2" style={{ alignItems: 'start' }}>
 
-      {/* Formulário de cadastro/edição */}
-      {showForm && (
-        <div className="card" style={{ marginBottom: '20px' }}>
+        {/* ── COLUNA ESQUERDA: formulário ─────────────────────────────── */}
+        <div className="card">
           <div className="card-title">{editId ? 'Editar Cliente' : 'Novo Cliente'}</div>
 
-          {/* Identificação */}
           <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px', paddingBottom: '4px', borderBottom: '1px solid var(--border)' }}>
             Identificação
           </div>
+
           <div className="field">
             <label>Nome / Razão Social</label>
             <input type="text" value={draft.nome} onChange={e => set({ nome: e.target.value })}
-              placeholder="Nome completo ou empresa" autoFocus />
+              placeholder="Nome completo ou empresa" />
           </div>
+
           <div className="grid-2">
             <div className="field">
               <label>Tipo</label>
@@ -235,10 +205,10 @@ export default function ClientesPage({ onGoTo }: Props) {
             </div>
           </div>
 
-          {/* Contato */}
           <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '1px', margin: '4px 0 8px', paddingBottom: '4px', borderBottom: '1px solid var(--border)' }}>
             Contato
           </div>
+
           <div className="grid-2">
             <div className="field">
               <label>Telefone / WhatsApp</label>
@@ -254,13 +224,13 @@ export default function ClientesPage({ onGoTo }: Props) {
             </div>
           </div>
 
-          {/* Endereço */}
           <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '1px', margin: '4px 0 8px', paddingBottom: '4px', borderBottom: '1px solid var(--border)' }}>
             Endereço
           </div>
+
           <div className="grid-2">
             <div className="field">
-              <label>CEP {cepLoading && <span style={{ color: 'var(--accent2)', fontSize: '10px' }}>buscando...</span>}</label>
+              <label>CEP {cepLoading && <span style={{ color: 'var(--accent2)', fontSize: '10px', fontWeight: 400, textTransform: 'none' }}>buscando...</span>}</label>
               <input type="text" value={draft.cep || ''}
                 onChange={e => set({ cep: maskCep(e.target.value) })}
                 onBlur={handleCepBlur}
@@ -274,6 +244,7 @@ export default function ClientesPage({ onGoTo }: Props) {
               </select>
             </div>
           </div>
+
           <div className="grid-2">
             <div className="field">
               <label>Logradouro</label>
@@ -285,9 +256,10 @@ export default function ClientesPage({ onGoTo }: Props) {
               <label>Número</label>
               <input type="text" value={draft.num || ''}
                 onChange={e => set({ num: e.target.value })}
-                placeholder="123" style={{ maxWidth: '100px' }} />
+                placeholder="123" />
             </div>
           </div>
+
           <div className="grid-2">
             <div className="field">
               <label>Bairro</label>
@@ -303,104 +275,80 @@ export default function ClientesPage({ onGoTo }: Props) {
             </div>
           </div>
 
-          {/* Observações */}
           <div className="field">
             <label>Observações</label>
             <textarea value={draft.obs || ''} onChange={e => set({ obs: e.target.value })} rows={2}
               placeholder="Prazo especial, condições de pagamento, preferências..."
-              style={{ width: '100%', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: '6px', padding: '8px 10px', color: 'var(--text)', fontFamily: 'var(--mono)', fontSize: '12px', resize: 'vertical', outline: 'none' }} />
+              style={{ width: '100%', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: '6px', padding: '8px 10px', color: 'var(--text)', fontFamily: 'var(--mono)', fontSize: '12px', resize: 'vertical', outline: 'none', transition: 'border-color .2s,box-shadow .2s' }} />
           </div>
 
           <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
             <button className="btn btn-primary" style={{ flex: 1 }} onClick={handleSalvar}>
-              {editId ? 'Salvar Alterações' : 'Cadastrar Cliente'}
+              Salvar Cliente
             </button>
             <button className="btn btn-secondary" onClick={handleCancel}>Cancelar</button>
           </div>
         </div>
-      )}
 
-      {/* Busca + lista */}
-      <div className="card">
-        <div className="field" style={{ margin: 0, marginBottom: filtered.length > 0 ? '16px' : 0 }}>
-          <label>Pesquisar</label>
-          <input type="text" value={search} onChange={e => setSearch(e.target.value)}
-            placeholder="Nome, CPF/CNPJ, telefone, e-mail ou cidade..." />
-        </div>
-
-        {filtered.length === 0 ? (
-          <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text2)', fontSize: '13px' }}>
-            {search ? 'Nenhum cliente encontrado.' : 'Nenhum cliente cadastrado ainda.'}
-          </div>
-        ) : (
-          <div>
-            <div style={{ fontSize: '11px', color: 'var(--text2)', marginBottom: '8px', fontWeight: 600 }}>
-              {filtered.length} cliente{filtered.length !== 1 ? 's' : ''}
-              {search && ` encontrado${filtered.length !== 1 ? 's' : ''}`}
+        {/* ── COLUNA DIREITA: lista ───────────────────────────────────── */}
+        <div>
+          <div className="card">
+            <div className="card-title">Clientes Cadastrados</div>
+            <div className="field">
+              <input type="text" value={search} onChange={e => setSearch(e.target.value)}
+                placeholder="Buscar por nome, CPF/CNPJ, telefone ou cidade..." />
             </div>
 
-            {filtered.map(c => (
-              <div key={c.id} className="cli-row" style={{ borderRadius: '6px', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
-                <div style={{ display: 'flex', width: '100%', gap: '8px', alignItems: 'flex-start' }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 700, fontSize: '13px' }}>
-                      {c.nome}
-                      {c.tipo && (
-                        <span style={{ marginLeft: '6px', fontSize: '10px', padding: '1px 5px', borderRadius: '4px', background: c.tipo === 'pj' ? 'rgba(124,58,237,.12)' : 'rgba(16,185,129,.1)', color: c.tipo === 'pj' ? 'var(--accent)' : '#10b981', fontWeight: 700 }}>
-                          {c.tipo === 'pj' ? 'PJ' : 'PF'}
-                        </span>
-                      )}
-                    </div>
-                    <div style={{ fontSize: '11px', color: 'var(--text2)', marginTop: '2px', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                      {c.doc && <span>{c.doc}</span>}
-                      {c.tel && <span>{c.tel}</span>}
-                      {c.email && <span>{c.email}</span>}
-                      {(c.cidade || c.uf) && <span>{[c.cidade, c.uf].filter(Boolean).join(' — ')}</span>}
-                    </div>
-                    {c.obs && (
-                      <div style={{ fontSize: '10px', color: 'var(--text3)', marginTop: '2px', fontStyle: 'italic' }}>
-                        {c.obs.slice(0, 80)}{c.obs.length > 80 ? '…' : ''}
-                      </div>
-                    )}
-                    <div style={{ fontSize: '10px', color: 'var(--text3)', marginTop: '2px' }}>
-                      Cadastrado em {new Date(c.ts).toLocaleDateString('pt-BR')}
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
-                    <button className="btn btn-secondary" style={{ fontSize: '11px', padding: '5px 10px' }}
-                      onClick={() => irParaOrcamento(c)} title="Abrir cálculo com este cliente">
-                      → Orçamento
-                    </button>
-                    <button className="btn-icon" onClick={() => abrirEditForm(c)} title="Editar">✎</button>
-                    <button className="btn-icon" onClick={() => setDeleteId(c.id)} title="Excluir"
-                      style={{ color: '#ef4444' }}>✕</button>
-                  </div>
+            <div id="lista-clientes">
+              {filtered.length === 0 ? (
+                <div style={{ color: 'var(--text3)', fontFamily: 'var(--mono)', fontSize: '12px', textAlign: 'center', padding: '30px 0' }}>
+                  {search ? 'Nenhum cliente encontrado' : 'Nenhum cliente cadastrado'}
                 </div>
-              </div>
-            ))}
+              ) : filtered.map(c => {
+                const endParts = [
+                  c.rua ? (c.rua + (c.num ? ', ' + c.num : '')) : '',
+                  (c.cidade && c.uf) ? c.cidade + '/' + c.uf : (c.cidade || c.uf || ''),
+                ].filter(Boolean);
+                return (
+                  <div key={c.id} className="cli-row">
+                    <div className="cli-info" style={{ flex: 1, minWidth: 0 }}>
+                      <div className="cli-nome">
+                        {c.nome}
+                        {c.tipo === 'pj' && (
+                          <span style={{ fontSize: '9px', background: 'rgba(124,58,237,.12)', color: 'var(--accent)', borderRadius: '3px', padding: '1px 5px', fontFamily: 'var(--display)', fontWeight: 700, verticalAlign: 'middle', marginLeft: '5px' }}>PJ</span>
+                        )}
+                      </div>
+                      {c.doc && <div className="cli-tel" style={{ color: 'var(--text2)' }}>{c.tipo === 'pj' ? 'CNPJ' : 'CPF'}: {c.doc}</div>}
+                      {c.tel && <div className="cli-tel">📞 {c.tel}</div>}
+                      {c.email && <div className="cli-tel">✉ {c.email}</div>}
+                      {endParts.length > 0 && <div className="cli-tel" style={{ color: 'var(--text3)' }}>📍 {endParts.join(' · ')}</div>}
+                    </div>
+                    <div className="cli-actions" style={{ flexShrink: 0 }}>
+                      <button className="btn-icon" onClick={() => irParaOrcamento(c)}>→ Orçamento</button>
+                      <button className="btn-icon" onClick={() => abrirEditForm(c)}>✎</button>
+                      <button className="btn-icon" onClick={() => setDeleteId(c.id)}>✕</button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
-        )}
+        </div>
       </div>
 
-      {/* Modal de confirmação de exclusão */}
+      {/* Modal de exclusão */}
       {deleteId && (
-        <div style={{
-          position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.6)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px'
-        }}>
-          <div style={{ background: 'var(--surface)', borderRadius: '12px', padding: '28px', maxWidth: '380px', width: '100%', textAlign: 'center' }}>
-            <div style={{ fontSize: '20px', marginBottom: '10px' }}>🗑️</div>
-            <div style={{ fontSize: '15px', fontWeight: 700, marginBottom: '8px' }}>Excluir cliente?</div>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div className="modal-pop" style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '12px', padding: '24px', width: '380px', maxWidth: '95vw', boxShadow: '0 8px 32px rgba(124,58,237,.2)' }}>
+            <div style={{ fontFamily: 'var(--display)', fontWeight: 800, fontSize: '15px', color: 'var(--accent)', marginBottom: '10px' }}>Excluir cliente?</div>
             <div style={{ fontSize: '13px', color: 'var(--text2)', marginBottom: '20px' }}>
-              <strong>{clientes.find(c => c.id === deleteId)?.nome}</strong><br />
-              Esta ação não pode ser desfeita.
+              <strong>{clientes.find(c => c.id === deleteId)?.nome}</strong>
+              <br />Esta ação não pode ser desfeita.
             </div>
-            <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button className="btn btn-primary" style={{ flex: 1, background: '#e11d48', boxShadow: '0 2px 8px rgba(225,29,72,.3)' }}
+                onClick={() => handleDelete(deleteId)}>Excluir</button>
               <button className="btn btn-secondary" onClick={() => setDeleteId(null)}>Cancelar</button>
-              <button className="btn btn-primary" onClick={() => handleDelete(deleteId)}
-                style={{ background: '#ef4444', boxShadow: '0 2px 8px rgba(239,68,68,.3)' }}>
-                Excluir
-              </button>
             </div>
           </div>
         </div>

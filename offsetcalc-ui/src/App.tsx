@@ -49,20 +49,22 @@ function AppInner({ setLoggedIn }: { setLoggedIn: (v: boolean) => void }) {
   return (
     <div style={{ width: '100%', minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       <div className="header">
-        <div className="header-inner" style={{ gridTemplateColumns: 'minmax(280px,340px) minmax(0,1fr) minmax(0,auto)' }}>
+        <div className="header-inner">
           <div className="logo" style={{ padding: 0 }}>
             {LOGO_SVG}
           </div>
-          <div className="nav-tabs">
+          <div className="nav-tabs" style={{ justifyContent: 'center', width: '100%' }}>
             {tabs.map(t => (
               <button key={t.id} className={`nav-tab${secao === t.id ? ' active' : ''}`} onClick={() => setSecao(t.id)}>
                 {t.label}
               </button>
             ))}
           </div>
-          <button className="nav-tab" onClick={() => logout()} style={{ color: 'rgba(244,114,182,.8)', flexShrink: 0 }}>
-            Sair
-          </button>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
+            <button className="nav-tab" onClick={() => logout()} style={{ color: 'rgba(244,114,182,.8)' }}>
+              Sair
+            </button>
+          </div>
         </div>
       </div>
 
@@ -77,6 +79,10 @@ function AppInner({ setLoggedIn }: { setLoggedIn: (v: boolean) => void }) {
       {toastMsg && (
         <div className="toast show">{toastMsg}</div>
       )}
+
+      <footer style={{ textAlign: 'center', padding: '16px 32px', fontFamily: 'var(--mono)', fontSize: '11px', color: 'var(--text3)', borderTop: '1px solid var(--border)', marginTop: '8px' }}>
+        V1.0 · Todos os direitos reservados · MOHR/SYS · Brasil
+      </footer>
     </div>
   );
 }
