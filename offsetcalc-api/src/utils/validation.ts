@@ -19,6 +19,7 @@ export const clientSchema = Joi.object({
   zip_code: Joi.string().max(20).allow('', null),
   country: Joi.string().max(50).default('Brasil'),
   notes: Joi.string().max(2000).allow('', null),
+  metadata: Joi.object().unknown(true).allow(null),
 });
 
 export const quoteInputSchema = Joi.object({
@@ -105,6 +106,15 @@ export const configUpdateSchema = Joi.object({
       percArea: Joi.number().min(0).max(100),
     })
   ),
+  formatos: Joi.array().items(
+    Joi.object({
+      nome: Joi.string().required(),
+      w: Joi.number().positive().required(),
+      h: Joi.number().positive().required(),
+      div: Joi.string().required(),
+      obs: Joi.string().allow('', null),
+    })
+  ),
   chapa_cost_brl: Joi.number().positive(),
   ink_cost_cmyk_per_ml: Joi.number().positive(),
   ink_cost_pantone_per_ml: Joi.number().positive(),
@@ -112,4 +122,14 @@ export const configUpdateSchema = Joi.object({
   setup_cost_per_chapa_brl: Joi.number().positive(),
   overhead_pct: Joi.number().min(0).max(100),
   margin_pct: Joi.number().min(0).max(100),
+  imposto_pct: Joi.number().min(0).max(100),
+  ci_aluguel_brl: Joi.number().min(0),
+  ci_energia_brl: Joi.number().min(0),
+  ci_manutencao_brl: Joi.number().min(0),
+  ci_outros_brl: Joi.number().min(0),
+  ci_horas_mes: Joi.number().integer().positive(),
+  tinta_cmyk_sg: Joi.number().positive(),
+  tinta_uv_per_ml: Joi.number().min(0),
+  tinta_uv_sg: Joi.number().positive(),
+  tinta_pantone_sg: Joi.number().positive(),
 });

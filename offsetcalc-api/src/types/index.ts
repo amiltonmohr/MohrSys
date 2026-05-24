@@ -69,6 +69,7 @@ export interface TenantConfig {
   materials: PaperType[];
   machines: Machine[];
   finishing: Finishing[];
+  formatos: FormatoConfig[];
   chapa_cost_brl: number;
   ink_cost_cmyk_per_ml: number;
   ink_cost_pantone_per_ml: number;
@@ -76,8 +77,26 @@ export interface TenantConfig {
   setup_cost_per_chapa_brl: number;
   overhead_pct: number;
   margin_pct: number;
+  imposto_pct: number;
+  ci_aluguel_brl: number;
+  ci_energia_brl: number;
+  ci_manutencao_brl: number;
+  ci_outros_brl: number;
+  ci_horas_mes: number;
+  tinta_cmyk_sg: number;
+  tinta_uv_per_ml: number;
+  tinta_uv_sg: number;
+  tinta_pantone_sg: number;
   created_at: Date;
   updated_at: Date;
+}
+
+export interface FormatoConfig {
+  nome: string;
+  w: number;
+  h: number;
+  div: string;
+  obs?: string;
 }
 
 // ─── Quote Types ───────────────────────────────────────────────
@@ -176,6 +195,7 @@ export interface Quote {
   id: string;
   tenant_id: string;
   client_id?: string;
+  client_name?: string;
   reference_number: string;
   description?: string;
   product_type: ProductType;
@@ -199,6 +219,8 @@ export interface Quote {
   status: 'draft' | 'sent' | 'accepted' | 'rejected' | 'archived';
   validity_days: number;
   valid_until?: Date;
+  prazo?: Date;
+  raw_entry?: Record<string, unknown> | null;
   created_at: Date;
   updated_at: Date;
   created_by?: string;
@@ -216,6 +238,7 @@ export interface Client {
   zip_code?: string;
   country: string;
   notes?: string;
+  metadata?: Record<string, unknown>;
   created_at: Date;
   updated_at: Date;
 }

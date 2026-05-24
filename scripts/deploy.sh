@@ -7,26 +7,32 @@ set -e
 
 SSH_KEY="$HOME/.oci/mohrsys_vm"
 VM="ubuntu@163.176.140.220"
-CONTAINER="mohrsys-ui-1"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
-echo "🔨 Build..."
-cd "$(dirname "$0")/../offsetcalc-ui"
+echo "🔨 Build do frontend..."
+cd "$ROOT/offsetcalc-ui"
 npm run build
-cd ..
 
-echo "📤 Enviando para VM..."
+echo "📤 Enviando Dockerfile + dist para VM..."
 rsync -az --delete -e "ssh -i $SSH_KEY -o StrictHostKeyChecking=no" \
-  offsetcalc-ui/dist/ "$VM":/tmp/ui_dist/
+  "$ROOT/offsetcalc-ui/dist/"       "$VM":/tmp/ui_dist/
+rsync -az -e "ssh -i $SSH_KEY -o StrictHostKeyChecking=no" \
+  "$ROOT/offsetcalc-ui/Dockerfile"  "$VM":~/MohrSys/offsetcalc-ui/Dockerfile
+rsync -az -e "ssh -i $SSH_KEY -o StrictHostKeyChecking=no" \
+  "$ROOT/offsetcalc-ui/nginx.conf"  "$VM":~/MohrSys/offsetcalc-ui/nginx.conf
 
-echo "🐳 Copiando para container..."
+echo "🐳 Rebuild da imagem UI na VM..."
 ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$VM" "
-  docker cp /tmp/ui_dist/index.html $CONTAINER:/usr/share/nginx/html/index.html &&
-  docker exec $CONTAINER rm -rf /usr/share/nginx/html/assets &&
-  docker exec $CONTAINER mkdir -p /usr/share/nginx/html/assets &&
-  docker cp /tmp/ui_dist/assets/. $CONTAINER:/usr/share/nginx/html/assets/ &&
-  docker exec $CONTAINER nginx -s reload
+  cp -r /tmp/ui_dist ~/MohrSys/offsetcalc-ui/dist
+  cd ~/MohrSys
+  docker build -t mohrsys-ui:latest ./offsetcalc-ui
+  docker stop mohrsys-ui-1 && docker rm mohrsys-ui-1
+  docker run -d --name mohrsys-ui-1 --restart unless-stopped \
+    -p 8080:80 \
+    --network mohrsys_default \
+    mohrsys-ui:latest
 "
 
-VERSION=$(node -p "require('./offsetcalc-ui/package.json').version")
+VERSION=$(node -p "require('$ROOT/offsetcalc-ui/package.json').version")
 echo ""
 echo "✅ Deploy v$VERSION concluído — mohrsys.novusti.com.br"
