@@ -426,9 +426,14 @@ export default function CalculoPage({ onGoTo, editEntry, onEditClear }: Props) {
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="section active">
-      <h2 style={{ fontSize: '20px', fontWeight: 800, marginBottom: '16px' }}>
-        Novo <span className="grad-text">Cálculo</span>
-      </h2>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(280px,340px) minmax(0,1fr) minmax(0,1.5fr)', gap: '20px', alignItems: 'flex-end', marginBottom: '8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <h2 style={{ fontFamily: 'var(--display)', fontSize: '22px', fontWeight: 800, letterSpacing: '-.5px', color: 'var(--text)', margin: 0 }}>
+            Novo <span style={{ color: 'var(--accent)' }}>Cálculo</span>
+          </h2>
+          <button className="btn btn-secondary" onClick={handleLimpar}>Limpar</button>
+        </div>
+      </div>
 
       <div className="section-grid">
 

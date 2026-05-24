@@ -194,12 +194,20 @@ export default function ConfigPage() {
                   <tr>
                     <th>Tipo</th><th>Gramatura</th><th>Formato</th>
                     <th style={{ textAlign: 'right' }}>R$/kg</th>
+                    <th style={{ textAlign: 'right' }}>R$/folha</th>
+                    <th style={{ textAlign: 'right' }}>R$/resma 500fls</th>
                     <th style={{ textAlign: 'right' }}>Fator Abs.</th>
                     <th></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {draft.papeis.map((p, i) => (
+                  {draft.papeis.map((p, i) => {
+                    const fmts = p.formato.toLowerCase().replace('cm','').split('x').map(s => parseFloat(s.trim()));
+                    const areaM2 = ((fmts[0] || 66) / 100) * ((fmts[1] || 96) / 100);
+                    const gram = parseFloat(p.gramatura) || 90;
+                    const precoFolha = (gram * areaM2 / 1000) * (p.precoPorKg || 12);
+                    const precoResma = precoFolha * 500;
+                    return (
                     <tr key={i}>
                       <td><input value={p.tipo} onChange={e => updatePapel(i, 'tipo', e.target.value)} /></td>
                       <td><input value={p.gramatura} onChange={e => updatePapel(i, 'gramatura', e.target.value)} style={{ width: '70px' }} /></td>
@@ -213,6 +221,12 @@ export default function ConfigPage() {
                           onChange={e => updatePapel(i, 'precoPorKg', parseFloat(e.target.value) || 0)}
                           style={{ textAlign: 'right', width: '80px' }} />
                       </td>
+                      <td style={{ textAlign: 'right', color: 'var(--accent2)', fontWeight: 600, fontFamily: 'var(--mono)', fontSize: '11px', whiteSpace: 'nowrap' }}>
+                        R$ {precoFolha.toFixed(4).replace('.', ',')}
+                      </td>
+                      <td style={{ textAlign: 'right', color: 'var(--text2)', fontFamily: 'var(--mono)', fontSize: '11px', whiteSpace: 'nowrap' }}>
+                        R$ {precoResma.toFixed(2).replace('.', ',')}
+                      </td>
                       <td style={{ textAlign: 'right' }}>
                         <input type="number" step="0.01" min="0.5" max="2.0" value={p.fatorAbs}
                           onChange={e => updatePapel(i, 'fatorAbs', parseFloat(e.target.value) || 1)}
@@ -220,7 +234,8 @@ export default function ConfigPage() {
                       </td>
                       <td><button className="btn-icon" onClick={() => removePapel(i)}>✕</button></td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
