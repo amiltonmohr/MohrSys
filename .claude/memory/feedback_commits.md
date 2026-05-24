@@ -1,24 +1,35 @@
 ---
 name: feedback-commits
-description: "Regras de commit e branching para MohrSys — nunca na main, sempre feature/ ou fix/"
-metadata: 
-  node_type: memory
+description: "Regras de branching, commit e deploy para MohrSys — nunca na main, build sempre local, memória vai para o GitHub"
+metadata:
   type: feedback
-  originSessionId: f4aa2509-ebfa-4a9a-bf17-3e1f75187821
 ---
 
-Commits devem SEMPRE ser feitos em branches de feature ou fix, nunca diretamente na main.
+## Branching e commits
 
-**Why:** Instrução explícita do usuário — "os commits no github devem sempre ser através de feature ou fix, de acordo com o cenário, nunca direto na main".
+Commits SEMPRE em branches `feature/<desc>` ou `fix/<desc>`, nunca diretamente na main.
+
+**Why:** Instrução explícita — "os commits no github devem sempre ser através de feature ou fix, de acordo com o cenário, nunca direto na main".
 
 **How to apply:**
-- Antes de qualquer commit, verificar se está em branch feature/* ou fix/*
-- Branch ativa de desenvolvimento: `feature/ui-fidelity-complete`
-- Criar PR para merge na main quando fase estiver completa
-- Nome de branches: `feature/<descricao>` ou `fix/<descricao>`
+- Antes de qualquer commit: confirmar que está em branch feature/* ou fix/*
+- Merge na main sempre via PR com `gh pr merge --merge --delete-branch`
+- Após merge: retornar para main local com `git checkout main && git pull`
 
-Memória também deve ir para o GitHub — incluir arquivos de memória nos commits.
+## Deploy — build SEMPRE local
 
-**Why:** Instrução explícita — "a memoria também deve ir para o github".
+Build (`npm run build`) NUNCA deve rodar na VM de produção.
 
-**How to apply:** Incluir a pasta `/home/amilton/.claude/projects/-mnt-c-Windows-System32/memory/` nos commits do repo, copiando os arquivos para dentro do repositório em uma pasta `.claude/memory/`.
+**Why:** VM tem apenas 1 GB de RAM — o processo de build do Vite/TypeScript mata a instância.
+
+**How to apply:** Sempre build local → rsync → docker cp → nginx reload. Ver fluxo completo em [[project-mohrsys]].
+
+## Memória vai para o GitHub
+
+Os arquivos de memória (`.claude/memory/`) devem ser commitados no repositório MohrSys.
+
+**Why:** Instrução explícita — "a memória também deve ir para o github". Garante continuidade entre sessões.
+
+**How to apply:**
+- Ao atualizar memórias: incluir `.claude/memory/` no commit ou abrir PR dedicado `fix/update-memory`
+- Caminho local dos arquivos: `/home/ismael/MohrSys/.claude/memory/`
