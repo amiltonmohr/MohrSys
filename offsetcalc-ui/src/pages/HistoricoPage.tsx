@@ -501,11 +501,9 @@ export default function HistoricoPage({ onEditar }: Props) {
                     {/* Valor */}
                     <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontWeight: 700, color: 'var(--accent)', whiteSpace: 'nowrap' }}>
                       R$ {total.toFixed(2).replace('.', ',')}
-                      {unitario > 0 && (
-                        <div style={{ fontSize: '10px', fontWeight: 400, color: 'var(--text2)' }}>
-                          R$ {unitario.toFixed(4).replace('.', ',')} /un
-                        </div>
-                      )}
+                      <div style={{ fontSize: '10px', fontWeight: 400, color: 'var(--text2)' }}>
+                        R$ {unitario.toFixed(4).replace('.', ',')} /un
+                      </div>
                     </td>
 
                     {/* Ações — menu ••• */}
