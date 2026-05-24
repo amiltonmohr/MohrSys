@@ -20,20 +20,7 @@ const emptyMaquina = (): MaquinaConfig   => ({ nome: '', formato: '36x52cm', cus
 const emptyAcab   = (): AcabamentoConfig => ({ nome: '', formula: 'laminacao', valorM2: 1.80, valorMinimo: 0 });
 const emptyFormato = (): FormatoConfig   => ({ nome: '', w: 33, h: 48, div: '1/4', obs: '' });
 
-const LS_COL_WIDTHS = 'mohrsys_col_widths';
 const LS_SHEETS_URL = 'mohrsys_sheets_url';
-
-interface ColWidths { ref: number; status: number; data: number; cliente: number; valor: number; }
-const defaultColWidths: ColWidths = { ref: 120, status: 110, data: 90, cliente: 150, valor: 130 };
-
-function applyColWidths(w: ColWidths) {
-  const root = document.documentElement;
-  root.style.setProperty('--col-hist-ref',     `${w.ref}px`);
-  root.style.setProperty('--col-hist-status',  `${w.status}px`);
-  root.style.setProperty('--col-hist-data',    `${w.data}px`);
-  root.style.setProperty('--col-hist-cliente', `${w.cliente}px`);
-  root.style.setProperty('--col-hist-valor',   `${w.valor}px`);
-}
 
 export default function ConfigPage() {
   const { config, salvarConfig, resetConfig, toast } = useApp();
@@ -52,16 +39,10 @@ export default function ConfigPage() {
   const [showAddAcab,    setShowAddAcab]    = useState(false);
   const [showAddFormato, setShowAddFormato] = useState(false);
 
-  const [colWidths, setColWidths] = useState<ColWidths>(() => {
-    try { return { ...defaultColWidths, ...JSON.parse(localStorage.getItem(LS_COL_WIDTHS) || '{}') }; }
-    catch { return defaultColWidths; }
-  });
   const [sheetsUrl, setSheetsUrl] = useState(() => localStorage.getItem(LS_SHEETS_URL) || '');
   const [sheetsStatus, setSheetsStatus] = useState('');
 
   useEffect(() => { setDraft({ ...config }); setDirty(false); }, [config]);
-
-  useEffect(() => { applyColWidths(colWidths); }, [colWidths]);
 
   const update = (patch: Partial<AppConfig>) => {
     setDraft(prev => {
@@ -129,13 +110,6 @@ export default function ConfigPage() {
     update({ formatos: [...(draft.formatos || []), { ...newFormato }] });
     setNewFormato(emptyFormato());
     setShowAddFormato(false);
-  };
-
-  // ── Column widths ─────────────────────────────────────────────────────────
-  const updateColWidth = (key: keyof ColWidths, val: number) => {
-    const next = { ...colWidths, [key]: val };
-    setColWidths(next);
-    localStorage.setItem(LS_COL_WIDTHS, JSON.stringify(next));
   };
 
   // ── Google Sheets ─────────────────────────────────────────────────────────
@@ -624,39 +598,6 @@ export default function ConfigPage() {
                 <button className="btn btn-secondary btn-sm" onClick={() => setShowAddAcab(true)}>+ Adicionar Acabamento</button>
               </div>
             )}
-          </div>
-        </div>
-      </div>
-
-      {/* Largura das Colunas */}
-      <div className="card" style={{ marginTop: '16px' }}>
-        <div className="card-title">Largura das Colunas — Lista de Orçamentos</div>
-        <div className="info-badge">Ajuste a largura de cada coluna para exibir o texto completo. Valores em pixels (px). A alteração é aplicada imediatamente ao digitar.</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: '16px', marginTop: '12px' }}>
-          <div className="field">
-            <label>Nº / Descrição (px)</label>
-            <input type="number" min="60" max="500" step="5" value={colWidths.ref}
-              onChange={e => updateColWidth('ref', parseInt(e.target.value) || 120)} />
-          </div>
-          <div className="field">
-            <label>Status (px)</label>
-            <input type="number" min="60" max="300" step="5" value={colWidths.status}
-              onChange={e => updateColWidth('status', parseInt(e.target.value) || 110)} />
-          </div>
-          <div className="field">
-            <label>Data (px)</label>
-            <input type="number" min="60" max="200" step="5" value={colWidths.data}
-              onChange={e => updateColWidth('data', parseInt(e.target.value) || 90)} />
-          </div>
-          <div className="field">
-            <label>Cliente (px)</label>
-            <input type="number" min="80" max="500" step="5" value={colWidths.cliente}
-              onChange={e => updateColWidth('cliente', parseInt(e.target.value) || 150)} />
-          </div>
-          <div className="field">
-            <label>Valor Total (px)</label>
-            <input type="number" min="80" max="300" step="5" value={colWidths.valor}
-              onChange={e => updateColWidth('valor', parseInt(e.target.value) || 130)} />
           </div>
         </div>
       </div>
