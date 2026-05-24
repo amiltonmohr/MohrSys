@@ -1,5 +1,6 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useApp } from '../context/AppContext';
+import type { OrcamentoEntry } from '../context/AppContext';
 import {
   calcular, calcMelhoresFormatos,
   CalculatorInput, CalculatorResult, AcabamentoParam, PapelVia, PRESETS,
@@ -9,6 +10,8 @@ type Secao = 'orcamento' | 'clientes' | 'config' | 'historico' | 'dashboard';
 
 interface Props {
   onGoTo: (s: Secao) => void;
+  editEntry?: OrcamentoEntry | null;
+  onEditClear?: () => void;
 }
 
 const GRAFISMOS = [
@@ -37,8 +40,8 @@ function mkInput(
   return { tipoAtivo, tiраgemInput: qty, ...rest } as CalculatorInput;
 }
 
-export default function CalculoPage({ onGoTo }: Props) {
-  const { config, clientes, addOrcamento, toast } = useApp();
+export default function CalculoPage({ onGoTo, editEntry, onEditClear }: Props) {
+  const { config, clientes, addOrcamento, updateOrcamento, toast } = useApp();
 
   // ── Identificação ────────────────────────────────────────────────────────
   const [jobRef, setJobRef] = useState('');
@@ -103,6 +106,14 @@ export default function CalculoPage({ onGoTo }: Props) {
   const [showComp, setShowComp] = useState(false);
   const [comparativo, setComparativo] = useState<{ tiragem: number; total: number; unitario: number }[]>([]);
 
+  // ── Sprint 2 ──────────────────────────────────────────────────────────────
+  const [tiragensExtras, setTiragensExtras] = useState<number[]>([]);
+  const [novaTimagem, setNovaTiragem] = useState('');
+  const [desc, setDesc] = useState('');
+  const [descManual, setDescManual] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const editApplied = useRef<string | null>(null);
+
   // ── Derived ───────────────────────────────────────────────────────────────
   const papeisTipos = useMemo(() => [...new Set(config.papeis.map(p => p.tipo))], [config.papeis]);
 
@@ -118,7 +129,7 @@ export default function CalculoPage({ onGoTo }: Props) {
 
   const formatosDisponiveis = useMemo(() => {
     if (!w || !h || !maquinaSel) return [];
-    return calcMelhoresFormatos(w, h, maquinaSel.pinca || 1.2, tipoAtivo === 'revista', maquinaSel.formato);
+    return calcMelhoresFormatos(w, h, maquinaSel.pinca || 1.2, tipoAtivo === 'revista', maquinaSel.formato, config.formatos);
   }, [w, h, maquinaSel, tipoAtivo]);
 
   useEffect(() => {
@@ -141,6 +152,53 @@ export default function CalculoPage({ onGoTo }: Props) {
     const sel = localStorage.getItem('mohrsys_goto_cliente');
     if (sel) { setClienteNome(sel); localStorage.removeItem('mohrsys_goto_cliente'); }
   }, []);
+
+  // Restaura formulário quando um orçamento é aberto para edição
+  useEffect(() => {
+    if (!editEntry) return;
+    if (editApplied.current === editEntry.id) return;
+    editApplied.current = editEntry.id;
+
+    const e = editEntry;
+    setEditingId(e.id);
+    setJobRef((e.ref as string) || '');
+    setClienteNome((e.cliente as string) || '');
+    setJobData((e.data as string) || new Date().toISOString().slice(0, 10));
+    setPrazo((e.prazo as string) || '');
+    setDesc((e.desc as string) || '');
+    setDescManual(true);
+    setTipoAtivo((e.tipoAtivo as 'simples' | 'bloco' | 'revista') || 'simples');
+    setTipoPapel((e.tipoPapel as string) || '');
+    setGramPapel((e.gramPapel as string) || '');
+    setW((e.w as number) || 21);
+    setH((e.h as number) || 29.7);
+    setCoresF((e.coresF as number) ?? 4);
+    setCoresV((e.coresV as number) ?? 0);
+    setTiraNRetiraEnabled(!!(e.tiraNRetiraEnabled));
+    setGrafismo((e.grafismo as number) || 0.7);
+    setMaquinaNome((e.maquinaNome as string) || '');
+    setMargemPct((e.margemPct as number) ?? 30);
+    setUrgPct((e.urgPct as number) ?? 0);
+    setRefugoPct((e.refugoPct as number) ?? 5);
+    setQty((e.qty as number) || (e.tiragem as number) || 1000);
+    setBlocoFolhas((e.blocoFolhas as number) || 50);
+    setBlocoVias((e.blocoVias as number) || 1);
+    setBlocoChapaModo((e.blocoChapaModo as 'unica' | 'por-via') || 'unica');
+    if (Array.isArray(e.blocoPapeis)) setBlocoPapeis(e.blocoPapeis as PapelVia[]);
+    setRevPaginas((e.revPaginas as number) || 16);
+    setRevCapaPapel((e.revCapaPapel as string) || '');
+    setRevCapaGram((e.revCapaGram as string) || '');
+    setRevCapaCoresF((e.revCapaCoresF as number) ?? 4);
+    setRevCapaCoresV((e.revCapaCoresV as number) ?? 4);
+    if (Array.isArray(e.acabSelecionados)) setAcabSelecionados(e.acabSelecionados as AcabamentoParam[]);
+    if (Array.isArray(e.tiragensExtras)) setTiragensExtras(e.tiragensExtras as number[]);
+    if (e.formatoNome) setFormatoNome(e.formatoNome as string);
+    if (e.resultado) setResultado(e.resultado as CalculatorResult);
+    setShowComp(false);
+    setComparativo([]);
+    onEditClear?.();
+    toast(`Editando ${e.ref} — ajuste e salve para atualizar`);
+  }, [editEntry]);
 
   const formatoSel = formatosDisponiveis.find(f => f.nome === formatoNome);
   const formatoPermiteTira = !!(
@@ -177,6 +235,20 @@ export default function CalculoPage({ onGoTo }: Props) {
     setResultado(res);
     setShowComp(false);
     setComparativo([]);
+    if (!descManual) {
+      const tipoLabel = tipoAtivo === 'bloco' ? 'Bloco' : tipoAtivo === 'revista' ? 'Revista' : 'Simples';
+      const acabNomes = acabSelecionados.map(a => config.acabamentos[a.index]?.nome).filter(Boolean);
+      const qtyLabel = tipoAtivo === 'bloco' ? `${qty} blocos` : tipoAtivo === 'revista' ? `${qty.toLocaleString('pt-BR')} ex.` : `${qty.toLocaleString('pt-BR')} un.`;
+      const autoDesc = [
+        tipoLabel,
+        tipoPapel && gramPapel ? `${tipoPapel} ${gramPapel}` : '',
+        `${w}×${h} cm`,
+        qtyLabel,
+        `${coresF}/${coresV} cores`,
+        ...acabNomes,
+      ].filter(Boolean).join(' · ');
+      setDesc(autoDesc);
+    }
   };
 
   const handleLimpar = () => {
@@ -186,31 +258,121 @@ export default function CalculoPage({ onGoTo }: Props) {
     setGrafismo(0.7); setMargemPct(30); setUrgPct(0); setRefugoPct(5); setQty(1000);
     setAcabSelecionados([]);
     setResultado(null); setShowComp(false); setComparativo([]);
+    setTiragensExtras([]); setNovaTiragem('');
+    setDesc(''); setDescManual(false);
+    setEditingId(null); editApplied.current = null;
   };
 
   const handleSalvar = () => {
     if (!resultado) return;
     const ref = jobRef || `ORC-${Date.now()}`;
-    addOrcamento({
+    const entry = {
       ref,
       cliente: clienteNome,
-      desc: `${tipoAtivo} · ${tipoPapel} ${gramPapel} · ${w}×${h}cm · ${qty.toLocaleString('pt-BR')} un.`,
+      desc: desc || `${tipoAtivo} · ${tipoPapel} ${gramPapel} · ${w}×${h}cm · ${qty.toLocaleString('pt-BR')} un.`,
       data: jobData || new Date().toISOString().slice(0, 10),
       prazo,
       tipoAtivo, tipoPapel, gramPapel, w, h, coresF, coresV,
+      tiraNRetiraEnabled, grafismo,
       maquinaNome, formatoNome, margemPct, urgPct, refugoPct,
-      qty, grafismo, blocoFolhas, blocoVias,
+      qty, blocoFolhas, blocoVias, blocoChapaModo, blocoPapeis,
+      revPaginas, revCapaPapel, revCapaGram, revCapaCoresF, revCapaCoresV,
+      acabSelecionados, tiragensExtras,
       total: resultado.total, unitario: resultado.unitario,
       resultado: { ...resultado },
-    });
-    toast(`Orçamento ${ref} salvo!`);
+    };
+    // inclui margem/subtotal diretamente para acesso rápido no dashboard
+    const entryFull = {
+      ...entry,
+      margem: resultado.margem,
+      subtotal: resultado.subtotal,
+    };
+    if (editingId) {
+      updateOrcamento(editingId, entryFull);
+      toast(`Orçamento ${ref} atualizado!`);
+      setEditingId(null); editApplied.current = null;
+    } else {
+      addOrcamento(entryFull);
+      toast(`Orçamento ${ref} salvo!`);
+    }
     onGoTo('historico');
+  };
+
+  const handleGerarProposta = () => {
+    if (!resultado) return;
+    const ref = jobRef || 'RASCUNHO';
+    const tiragensComp = tiragensExtras.length > 0
+      ? (() => {
+          const rest = buildRest();
+          return [...new Set([qty, ...tiragensExtras])].sort((a, b) => a - b)
+            .map(t => {
+              const r = calcular(mkInput(tipoAtivo, t, rest), config);
+              if (r.erro) return null;
+              return { tiраgemInput: t, total: r.total, unitario: r.unitario, subtotal: r.subtotal };
+            }).filter(Boolean);
+        })()
+      : [{ tiраgemInput: qty, total: resultado.total, unitario: resultado.unitario, subtotal: resultado.subtotal }];
+
+    const entry = {
+      id: 'preview', ref, cliente: clienteNome,
+      desc: desc || `${tipoAtivo} · ${tipoPapel} ${gramPapel} · ${w}×${h}cm · ${qty.toLocaleString('pt-BR')} un.`,
+      data: jobData, prazo, ts: Date.now(), aprovado: false,
+      total: resultado.total, unitario: resultado.unitario,
+      tiragensComparativo: tiragensComp,
+      resultado: { ...resultado },
+    };
+    const cli = clientes.find(c => c.nome === clienteNome);
+
+    // importa e usa a mesma função de geração da proposta
+    const brl = (v: unknown, dec = 2) => typeof v === 'number' ? `R$ ${v.toFixed(dec).replace('.', ',')}` : '—';
+    const now = new Date().toLocaleDateString('pt-BR');
+    const validade = new Date(Date.now() + 30 * 24 * 3600 * 1000).toLocaleDateString('pt-BR');
+    const comp = tiragensComp as { tiраgemInput?: number; total: number; unitario: number }[];
+    const blocoAtivo = tipoAtivo === 'bloco';
+    const revistaAtivo = tipoAtivo === 'revista';
+    const qtyLabel = blocoAtivo ? 'blocos' : revistaAtivo ? 'exemplares' : 'unidades';
+    const unitLbl = blocoAtivo ? 'por Bloco' : revistaAtivo ? 'por Exemplar' : 'Unitário';
+    const jobLines = resultado.jobLines || [];
+    const jobRowsHTML = jobLines.filter((l: {label:string;value:string}) => !l.label.toLowerCase().includes('custo'))
+      .map((l: {label:string;value:string}) => `<tr><td style="color:#6b5f8a;width:42%">${l.label}</td><td><strong>${l.value}</strong></td></tr>`).join('');
+
+    let qtySection = '';
+    if (comp.length > 1) {
+      const bestUnit = Math.min(...comp.map(r => r.unitario || Infinity));
+      const rows = comp.map(r => {
+        const best = Math.abs((r.unitario || 0) - bestUnit) < 0.0001;
+        return `<tr${best ? ' class="best"' : ''}><td>${(r.tiраgemInput || 0).toLocaleString('pt-BR')} ${qtyLabel}</td><td class="num">${brl(r.total)}</td><td class="num best-unit">${brl(r.unitario, 4)}${best ? ' ✓' : ''}</td></tr>`;
+      }).join('');
+      qtySection = `<h2>Opções de Quantidade</h2><table><thead><tr><th style="text-align:left;padding:6px 8px;border-bottom:2px solid #7c3aed;font-size:11px;color:#6b5f8a">Quantidade</th><th style="text-align:right;padding:6px 8px;border-bottom:2px solid #7c3aed;font-size:11px;color:#6b5f8a">Preço Total</th><th style="text-align:right;padding:6px 8px;border-bottom:2px solid #7c3aed;font-size:11px;color:#6b5f8a">Valor ${unitLbl}</th></tr></thead><tbody>${rows}</tbody></table><div style="font-size:10px;color:#b0a8c8;margin-top:6px">✓ melhor custo unitário</div>`;
+    } else {
+      const r = comp[0];
+      qtySection = `<div class="total-box"><div><div class="lbl">Total de Venda</div><div class="tv">${brl(r.total)}</div><div style="font-size:11px;color:#6b5f8a;margin-top:4px">${(r.tiраgemInput || 0).toLocaleString('pt-BR')} ${qtyLabel}</div></div><div style="text-align:right"><div class="lbl">Valor ${unitLbl}</div><div class="uv">${brl(r.unitario, 4)}</div></div></div>`;
+    }
+    const tel = cli?.tel?.replace(/\D/g, '');
+    const waMsg = encodeURIComponent(`Olá ${clienteNome || ''}, segue proposta Nº ${ref}:\n\n${entry.desc}\n\n${comp.map(r => `${(r.tiраgemInput||0).toLocaleString('pt-BR')} ${qtyLabel} → ${brl(r.total)} (${brl(r.unitario,4)}/un.)`).join('\n')}\n\nVálido por 30 dias. Aguardo retorno!`);
+    const waLink = tel ? `https://wa.me/55${tel}?text=${waMsg}` : '';
+
+    const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Proposta ${ref}</title>
+<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Segoe UI,Arial,sans-serif;font-size:13px;color:#1e1535;background:#fff;padding:32px;max-width:720px;margin:0 auto}h2{font-size:11px;font-weight:700;color:#7c3aed;text-transform:uppercase;letter-spacing:1px;margin:22px 0 8px;padding-bottom:4px;border-bottom:2px solid #ece9f5}.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;padding-bottom:18px;border-bottom:3px solid #7c3aed}.logo{font-size:22px;font-weight:900;color:#7c3aed;letter-spacing:-1px}.logo span{color:#06b6d4}.meta{text-align:right;font-size:11.5px;color:#6b5f8a;line-height:1.9}.meta strong{font-size:14px;color:#1e1535;display:block;margin-bottom:2px}table{width:100%;border-collapse:collapse;font-size:12.5px}td,th{padding:7px 8px;border-bottom:1px solid #ece9f5}td:first-child{color:#6b5f8a;width:42%}td.num{text-align:right;font-weight:600;font-family:monospace}tr.best td{background:#f0fdf4}tr.best td.best-unit{color:#16a34a;font-weight:800}.total-box{background:#f3f0ff;border:2px solid #7c3aed;border-radius:10px;padding:18px 22px;margin-top:20px;display:flex;justify-content:space-between;align-items:center}.lbl{font-size:10px;font-weight:700;color:#6b5f8a;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}.tv{font-size:28px;font-weight:900;color:#7c3aed;font-family:monospace}.uv{font-size:15px;color:#06b6d4;font-family:monospace;font-weight:700}.actions{display:flex;gap:12px;margin-bottom:24px;justify-content:center}.btn{padding:10px 24px;border-radius:6px;border:none;font-size:13px;font-weight:700;cursor:pointer;text-decoration:none;display:inline-block;text-align:center}@media print{.actions{display:none!important}}</style>
+</head><body>
+<div class="actions"><button class="btn" style="background:#7c3aed;color:#fff" onclick="window.print()">🖨 Salvar como PDF</button>${waLink ? `<a class="btn" style="background:#25D366;color:#fff" href="${waLink}" target="_blank">💬 WhatsApp</a>` : ''}</div>
+<div class="header"><div><div class="logo">MOHR<span>SYS</span></div><div style="font-size:11px;color:#6b5f8a;margin-top:4px">Soluções em Impressão Offset</div></div><div class="meta"><div>PROPOSTA COMERCIAL</div><strong>${ref}</strong><div>${now} · Válida até ${validade}</div></div></div>
+<h2>Destinatário</h2><table><tbody><tr><td>Cliente</td><td><strong>${clienteNome || '—'}</strong></td></tr>${entry.prazo ? `<tr><td>Prazo Estimado</td><td>${entry.prazo}</td></tr>` : ''}</tbody></table>
+<h2>Especificações</h2><div style="font-size:12px;color:#374151;margin-bottom:8px">${entry.desc}</div>${jobRowsHTML ? `<table><tbody>${jobRowsHTML}</tbody></table>` : ''}
+<h2>${comp.length > 1 ? 'Opções de Quantidade' : 'Valor da Proposta'}</h2>${qtySection}
+<script>window.onload=()=>window.print()</script>
+</body></html>`;
+
+    const popup = window.open('', '_blank', 'width=820,height=920');
+    if (popup) { popup.document.write(html); popup.document.close(); }
+    void entry;
   };
 
   const handleToggleComp = () => {
     if (!showComp && resultado) {
       const rest = buildRest();
-      const rows = TIRAGENS_COMP.map(t => {
+      const allTiragens = [...new Set([...TIRAGENS_COMP, ...tiragensExtras])].sort((a, b) => a - b);
+      const rows = allTiragens.map(t => {
         const r = calcular(mkInput(tipoAtivo, t, rest), config);
         if (r.erro) return null;
         return { tiragem: t, total: r.total, unitario: r.unitario };
@@ -219,6 +381,15 @@ export default function CalculoPage({ onGoTo }: Props) {
     }
     setShowComp(v => !v);
   };
+
+  const addTiragemExtra = () => {
+    const t = parseInt(novaTimagem);
+    if (!t || t <= 0) return;
+    setTiragensExtras(prev => prev.includes(t) ? prev : [...prev, t].sort((a, b) => a - b));
+    setNovaTiragem('');
+  };
+
+  const removeTiragemExtra = (t: number) => setTiragensExtras(prev => prev.filter(x => x !== t));
 
   const toggleAcab = (index: number) => {
     setAcabSelecionados(prev => {
@@ -255,9 +426,14 @@ export default function CalculoPage({ onGoTo }: Props) {
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="section active">
-      <h2 style={{ fontSize: '20px', fontWeight: 800, marginBottom: '16px' }}>
-        Novo <span className="grad-text">Cálculo</span>
-      </h2>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(280px,340px) minmax(0,1fr) minmax(0,1.5fr)', gap: '20px', alignItems: 'flex-end', marginBottom: '8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <h2 style={{ fontFamily: 'var(--display)', fontSize: '22px', fontWeight: 800, letterSpacing: '-.5px', color: 'var(--text)', margin: 0 }}>
+            Novo <span style={{ color: 'var(--accent)' }}>Cálculo</span>
+          </h2>
+          <button className="btn btn-secondary" onClick={handleLimpar}>Limpar</button>
+        </div>
+      </div>
 
       <div className="section-grid">
 
@@ -312,14 +488,19 @@ export default function CalculoPage({ onGoTo }: Props) {
 
             <div className="field">
               <label>Tipo de Material</label>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '6px' }}>
-                {(['simples', 'bloco', 'revista'] as const).map(tipo => (
-                  <button key={tipo}
-                    className={`btn ${tipoAtivo === tipo ? 'btn-primary' : 'btn-secondary'}`}
-                    style={{ padding: '8px 4px', fontSize: '11px', fontWeight: 700 }}
-                    onClick={() => setTipoAtivo(tipo)}>
-                    {tipo === 'simples' ? 'Simples' : tipo === 'bloco' ? 'Bloco' : 'Revista'}
-                  </button>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '8px', marginBottom: '4px' }}>
+                {[
+                  { id: 'simples', icon: '🖨', nome: 'Impressão Simples', desc: 'Folder, cartão, folheto, timbrado' },
+                  { id: 'bloco',   icon: '📋', nome: 'Bloco',             desc: 'Pedido, recibo, nota, formulário' },
+                  { id: 'revista', icon: '📖', nome: 'Revista / Catálogo', desc: 'Revista, catálogo, apostila' },
+                ].map(tipo => (
+                  <div key={tipo.id}
+                    className={`tipo-material-card${tipoAtivo === tipo.id ? ' active' : ''}`}
+                    onClick={() => setTipoAtivo(tipo.id as 'simples' | 'bloco' | 'revista')}>
+                    <div className="tipo-material-icon">{tipo.icon}</div>
+                    <div className="tipo-material-nome">{tipo.nome}</div>
+                    <div className="tipo-material-desc">{tipo.desc}</div>
+                  </div>
                 ))}
               </div>
             </div>
@@ -541,6 +722,24 @@ export default function CalculoPage({ onGoTo }: Props) {
                  tipoAtivo === 'revista' ? 'Nº de Exemplares' : 'Tiragem (unidades)'}
               </label>
               <input type="number" value={qty} onChange={e => setQty(Math.max(1, +e.target.value))} min={1} placeholder="1000" />
+              <div style={{ marginTop: '6px', display: 'flex', gap: '4px', flexWrap: 'wrap', alignItems: 'center' }}>
+                {tiragensExtras.map(t => (
+                  <span key={t} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: 'rgba(6,182,212,.1)', border: '1px solid rgba(6,182,212,.3)', borderRadius: '4px', padding: '2px 7px', fontFamily: 'var(--mono)', fontSize: '11px', color: 'var(--accent2)' }}>
+                    {t.toLocaleString('pt-BR')} un.
+                    <span style={{ cursor: 'pointer', fontSize: '13px', opacity: .7 }} onClick={() => removeTiragemExtra(t)}>×</span>
+                  </span>
+                ))}
+                <div style={{ display: 'flex', gap: '4px', marginLeft: tiragensExtras.length > 0 ? '4px' : 0 }}>
+                  <input
+                    type="number" min={1} value={novaTimagem}
+                    onChange={e => setNovaTiragem(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && addTiragemExtra()}
+                    placeholder="+ comparar"
+                    style={{ width: '90px', fontSize: '11px', padding: '3px 6px' }}
+                  />
+                  <button className="btn btn-secondary" style={{ fontSize: '10px', padding: '3px 8px' }} onClick={addTiragemExtra}>+</button>
+                </div>
+              </div>
             </div>
 
             <div className="field">
@@ -561,7 +760,7 @@ export default function CalculoPage({ onGoTo }: Props) {
         </div>
 
         {/* ══ COLUNA 3 — Parâmetros e Resultado ══════════════════════════════ */}
-        <div className="sticky-panel">
+        <div>
           <div className="card">
             <div className="card-title">Parâmetros Operacionais</div>
 
@@ -609,81 +808,126 @@ export default function CalculoPage({ onGoTo }: Props) {
               <div className="result-section" style={{ marginTop: '12px' }}>
                 <div className="result-title">Resultado</div>
 
-                {/* Total em destaque */}
-                <div style={{ textAlign: 'center', padding: '20px 0 16px', borderBottom: '1px solid rgba(255,255,255,.08)' }}>
-                  <div style={{ fontSize: '10px', color: 'rgba(167,139,250,.7)', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '8px' }}>
-                    Total do Orçamento
+                <div className="result-grid" style={{ gridTemplateColumns: 'repeat(3,1fr)' }}>
+                  <div className="result-item">
+                    <div className="result-item-label">Custo (s/margem)</div>
+                    <div className="result-item-value">R$ {resultado.subtotal.toFixed(2)}</div>
                   </div>
-                  <div className="grad-text" style={{ fontSize: '36px', fontWeight: 900, lineHeight: 1.1 }}>
-                    R$ {resultado.total.toFixed(2)}
+                  <div className="result-item">
+                    <div className="result-item-label">Preço de Venda</div>
+                    <div className="result-item-value highlight">R$ {resultado.total.toFixed(2)}</div>
                   </div>
-                  <div style={{ fontSize: '13px', color: 'rgba(255,255,255,.5)', marginTop: '8px' }}>
-                    {resultado.unitarioLabel}:{' '}
-                    <strong style={{ color: '#34d399' }}>R$ {resultado.unitario.toFixed(4)}</strong>
+                  <div className="result-item">
+                    <div className="result-item-label">{resultado.unitarioLabel}</div>
+                    <div className="result-item-value green">R$ {resultado.unitario.toFixed(4)}</div>
                   </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '16px' }}>
+                  <span className="tag tag-yellow">
+                    {qty.toLocaleString('pt-BR')} {tipoAtivo === 'bloco' ? 'blocos' : tipoAtivo === 'revista' ? 'ex.' : 'un.'}
+                  </span>
+                  {tipoPapel && gramPapel && (
+                    <span className="tag tag-teal">{tipoPapel} {gramPapel}g</span>
+                  )}
+                  <span className="tag tag-yellow">{coresF}×{coresV} cores</span>
+                  {tiraNRetiraEnabled && <span className="tag tag-teal">Tira e Retira</span>}
+                  <span className="tag tag-yellow">{margemPct}% margem</span>
                   {resultado.urgPct > 0 && (
-                    <div style={{ fontSize: '11px', color: '#fbbf24', marginTop: '4px' }}>
-                      + {resultado.urgPct}% urgência = R$ {resultado.adUrgencia.toFixed(2)}
-                    </div>
+                    <span className="tag" style={{ background: 'rgba(251,191,36,.1)', color: '#d97706', border: '1px solid rgba(251,191,36,.3)' }}>
+                      +{resultado.urgPct}% urgência
+                    </span>
                   )}
                 </div>
 
-                {/* Breakdown de custos */}
-                <div style={{ padding: '12px 0' }}>
-                  <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>
-                    Composição de Custo
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+                  <div className="result-breakdown">
+                    <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>Composição do Job</div>
+                    {resultado.jobLines.map((l: { label: string; value: string }, i: number) => (
+                      <div key={i} className="breakdown-row">
+                        <span className="breakdown-label">{l.label}</span>
+                        <span className="breakdown-value">{l.value}</span>
+                      </div>
+                    ))}
                   </div>
-                  {([
-                    ['Papel', resultado.custoPapel],
-                    ['Chapas', resultado.custoChapas],
-                    ['Setup', resultado.custoSetup],
-                    ['Tinta', resultado.custoTinta],
-                    ['Máquina', resultado.custoMaquina],
-                    ['Custo Indireto', resultado.custoIndireto],
-                    ...(resultado.custoAcab > 0 ? [['Acabamentos', resultado.custoAcab]] : []),
-                  ] as [string, number][]).map(([label, val]) => (
-                    <div key={label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', padding: '3px 0', borderBottom: '1px solid var(--border)' }}>
-                      <span style={{ color: 'var(--text2)' }}>{label}</span>
-                      <span style={{ fontFamily: 'var(--mono)' }}>R$ {val.toFixed(2)}</span>
+                  <div className="result-breakdown">
+                    <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>Composição do Custo</div>
+                    {([
+                      ['Papel', resultado.custoPapel],
+                      ['Chapas', resultado.custoChapas],
+                      ['Setup', resultado.custoSetup],
+                      ['Tinta', resultado.custoTinta],
+                      ['Máquina', resultado.custoMaquina],
+                      ['Custo Indireto', resultado.custoIndireto],
+                      ...(resultado.custoAcab > 0 ? [['Acabamentos', resultado.custoAcab]] : []),
+                    ] as [string, number][]).map(([label, val]) => (
+                      <div key={label} className="breakdown-row">
+                        <span className="breakdown-label">{label}</span>
+                        <span className="breakdown-value">R$ {val.toFixed(2)}</span>
+                      </div>
+                    ))}
+                    <div className="breakdown-row">
+                      <span className="breakdown-label">Margem ({resultado.margemPct}%)</span>
+                      <span className="breakdown-value" style={{ color: 'var(--accent)' }}>R$ {resultado.margem.toFixed(2)}</span>
                     </div>
-                  ))}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', padding: '6px 0', fontWeight: 700 }}>
-                    <span>Subtotal</span>
-                    <span style={{ fontFamily: 'var(--mono)' }}>R$ {resultado.subtotal.toFixed(2)}</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', padding: '2px 0', color: 'var(--accent)' }}>
-                    <span>Margem ({resultado.margemPct}%)</span>
-                    <span style={{ fontFamily: 'var(--mono)' }}>R$ {resultado.margem.toFixed(2)}</span>
+                    {(config.imposto ?? 0) > 0 && (
+                      <div className="breakdown-row">
+                        <span className="breakdown-label">Impostos ({config.imposto}%)</span>
+                        <span className="breakdown-value" style={{ color: '#d97706' }}>R$ {(resultado.total * config.imposto / 100).toFixed(2)}</span>
+                      </div>
+                    )}
+                    <div className="breakdown-row">
+                      <span className="breakdown-label">TOTAL</span>
+                      <span className="breakdown-value" style={{ color: 'var(--accent)', fontWeight: 700, fontSize: '13px' }}>R$ {resultado.total.toFixed(2)}</span>
+                    </div>
                   </div>
                 </div>
 
-                {/* Detalhes técnicos */}
-                <div style={{ padding: '10px 0', borderTop: '1px solid var(--border)' }}>
-                  <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>
-                    Detalhes Técnicos
+                {resultado.acabSel.length > 0 && (
+                  <div style={{ fontSize: '11px', color: 'var(--text2)', marginBottom: '4px' }}>
+                    {resultado.acabSel.map((a: { nome: string; val: number }) => `${a.nome}: R$ ${a.val.toFixed(2)}`).join(' · ')}
                   </div>
-                  {resultado.jobLines.map((l, i) => (
-                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', padding: '2px 0', gap: '8px' }}>
-                      <span style={{ color: 'var(--text2)', flexShrink: 0 }}>{l.label}</span>
-                      <span style={{ fontFamily: 'var(--mono)', textAlign: 'right', fontSize: '10px' }}>{l.value}</span>
-                    </div>
-                  ))}
-                  {resultado.acabSel.length > 0 && (
-                    <div style={{ marginTop: '6px', fontSize: '10px', color: 'var(--text2)' }}>
-                      {resultado.acabSel.map(a => `${a.nome}: R$ ${a.val.toFixed(2)}`).join(' · ')}
-                    </div>
+                )}
+              </div>
+
+              {/* Descrição + Ações */}
+              <div style={{ marginTop: '12px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                  <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    Descrição do Orçamento
+                  </label>
+                  {descManual && (
+                    <button
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent2)', fontSize: '11px', fontFamily: 'var(--mono)', display: 'flex', alignItems: 'center', gap: '3px', padding: '2px 4px' }}
+                      onClick={() => { setDescManual(false); handleCalcular(); }}
+                      title="Voltar para descrição automática">
+                      ↺ auto
+                    </button>
                   )}
                 </div>
-
-                {/* Ações */}
-                <div style={{ display: 'flex', gap: '8px', paddingTop: '12px', borderTop: '1px solid var(--border)' }}>
-                  <button className="btn btn-primary" style={{ flex: 1 }} onClick={handleSalvar}>
-                    Salvar Orçamento
+                <input
+                  type="text"
+                  value={desc}
+                  onChange={e => { setDesc(e.target.value); setDescManual(true); }}
+                  placeholder="Gerado automaticamente após calcular..."
+                  style={{ width: '100%', fontSize: '12px', marginBottom: '12px' }}
+                />
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  <button className="btn btn-primary" style={{ flex: 2, minWidth: '120px' }} onClick={handleSalvar}>
+                    {editingId ? 'Atualizar Orçamento' : 'Salvar Orçamento'}
                   </button>
-                  <button className="btn btn-secondary" onClick={handleToggleComp}>
+                  <button className="btn btn-secondary" style={{ flex: 1 }} onClick={handleGerarProposta}>
+                    Proposta
+                  </button>
+                  <button className="btn btn-secondary" style={{ flex: 1 }} onClick={handleToggleComp}>
                     {showComp ? 'Fechar' : 'Tiragens'}
                   </button>
                 </div>
+                {editingId && (
+                  <div style={{ fontSize: '11px', color: '#f59e0b', textAlign: 'center', marginTop: '6px' }}>
+                    Modo edição — clique em "Limpar" para cancelar
+                  </div>
+                )}
               </div>
 
               {/* Comparativo de Tiragens */}

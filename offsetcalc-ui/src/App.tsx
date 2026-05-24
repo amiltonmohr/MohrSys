@@ -6,6 +6,7 @@ import ConfigPage from './pages/ConfigPage';
 import HistoricoPage from './pages/HistoricoPage';
 import DashboardPage from './pages/DashboardPage';
 import LoginPage from './pages/LoginPage';
+import type { OrcamentoEntry } from './context/AppContext';
 import './index.css';
 
 const LOGO_SVG = (
@@ -23,7 +24,13 @@ type Secao = 'orcamento' | 'clientes' | 'config' | 'historico' | 'dashboard';
 
 function AppInner({ setLoggedIn }: { setLoggedIn: (v: boolean) => void }) {
   const [secao, setSecao] = useState<Secao>('orcamento');
+  const [editEntry, setEditEntry] = useState<OrcamentoEntry | null>(null);
   const { toastMsg } = useApp();
+
+  const handleEditar = (entry: OrcamentoEntry) => {
+    setEditEntry(entry);
+    setSecao('orcamento');
+  };
 
   const logout = () => {
     localStorage.removeItem('access_token');
@@ -42,34 +49,40 @@ function AppInner({ setLoggedIn }: { setLoggedIn: (v: boolean) => void }) {
   return (
     <div style={{ width: '100%', minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       <div className="header">
-        <div className="header-inner" style={{ gridTemplateColumns: 'minmax(280px,340px) minmax(0,1fr) minmax(0,auto)' }}>
+        <div className="header-inner">
           <div className="logo" style={{ padding: 0 }}>
             {LOGO_SVG}
           </div>
-          <div className="nav-tabs">
+          <div className="nav-tabs" style={{ justifyContent: 'center', width: '100%' }}>
             {tabs.map(t => (
               <button key={t.id} className={`nav-tab${secao === t.id ? ' active' : ''}`} onClick={() => setSecao(t.id)}>
                 {t.label}
               </button>
             ))}
           </div>
-          <button className="nav-tab" onClick={() => logout()} style={{ color: 'rgba(244,114,182,.8)', flexShrink: 0 }}>
-            Sair
-          </button>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
+            <button className="nav-tab" onClick={() => logout()} style={{ color: 'rgba(244,114,182,.8)' }}>
+              Sair
+            </button>
+          </div>
         </div>
       </div>
 
       <div className="main" style={{ flex: 1 }}>
-        {secao === 'orcamento'  && <CalculoPage  onGoTo={(s: Secao) => setSecao(s)} />}
+        {secao === 'orcamento'  && <CalculoPage  onGoTo={(s: Secao) => setSecao(s)} editEntry={editEntry} onEditClear={() => setEditEntry(null)} />}
         {secao === 'clientes'   && <ClientesPage onGoTo={(s: Secao) => setSecao(s)} />}
         {secao === 'config'     && <ConfigPage   />}
-        {secao === 'historico'  && <HistoricoPage onGoTo={(s: Secao) => setSecao(s)} />}
+        {secao === 'historico'  && <HistoricoPage onGoTo={(s: Secao) => setSecao(s)} onEditar={handleEditar} />}
         {secao === 'dashboard'  && <DashboardPage />}
       </div>
 
       {toastMsg && (
         <div className="toast show">{toastMsg}</div>
       )}
+
+      <footer style={{ textAlign: 'center', padding: '16px 32px', fontFamily: 'var(--mono)', fontSize: '11px', color: 'var(--text3)', borderTop: '1px solid var(--border)', marginTop: '8px' }}>
+        V1.0 · Todos os direitos reservados · MOHR/SYS · Brasil
+      </footer>
     </div>
   );
 }

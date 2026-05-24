@@ -25,6 +25,15 @@ export interface AcabamentoConfig {
   faca?: number;
   valor?: number;
   percArea?: number;
+  valorMinimo?: number;
+}
+
+export interface FormatoConfig {
+  nome: string;
+  w: number;
+  h: number;
+  div: string;
+  obs?: string;
 }
 
 export interface AppConfig {
@@ -39,6 +48,8 @@ export interface AppConfig {
   tintaUvSg: number;
   maquinas: MaquinaConfig[];
   acabamentos: AcabamentoConfig[];
+  formatos: FormatoConfig[];
+  imposto: number;
   ciAluguel: number;
   ciEnergia: number;
   ciManutencao: number;
@@ -227,13 +238,15 @@ function calcEncaixe(fw: number, fh: number, pw: number, ph: number, pinca: numb
 }
 
 export function calcMelhoresFormatos(
-  pw: number, ph: number, pinca = 1.2, aberto = false, maqFormatoStr = '36x52cm'
+  pw: number, ph: number, pinca = 1.2, aberto = false, maqFormatoStr = '36x52cm',
+  customFormatos?: FormatoConfig[]
 ): FormatoResult[] {
+  const formatosSrc = (customFormatos && customFormatos.length > 0) ? customFormatos : FORMATOS_PADRAO;
   const maqParts = maqFormatoStr.toLowerCase().replace('cm', '').split('x').map(s => parseFloat(s.trim()));
   const maqW = maqParts[0] || 36, maqH = maqParts[1] || 52;
   let pw2 = pw, ph2 = ph;
   if (aberto) { pw2 = Math.max(pw, ph); ph2 = Math.min(pw, ph) * 2; }
-  return FORMATOS_PADRAO
+  return formatosSrc
     .filter(f => (f.w <= maqW && f.h <= maqH) || (f.h <= maqW && f.w <= maqH))
     .map(f => {
       const { enc, orientacao, colunas } = calcEncaixe(f.w, f.h, pw2, ph2, pinca);
@@ -288,7 +301,7 @@ export function calcular(input: CalculatorInput, cfg: AppConfig): CalculatorResu
   const isAberto = revistaAtivo;
 
   // Formatos disponíveis
-  const formatosDisponiveis = calcMelhoresFormatos(w, h, pinca, isAberto, maquina.formato);
+  const formatosDisponiveis = calcMelhoresFormatos(w, h, pinca, isAberto, maquina.formato, cfg.formatos);
   const formatoSel = formatosDisponiveis.find(f => f.nome === formatoNome) || formatosDisponiveis[0];
   if (!formatoSel) return { erro: 'Nenhum formato compatível' } as CalculatorResult;
 
@@ -486,6 +499,7 @@ export function calcular(input: CalculatorInput, cfg: AppConfig): CalculatorResu
     } else if (a.formula === 'fixo') {
       val = a.valor || 0;
     }
+    val = Math.max(val, a.valorMinimo || 0);
     custoAcab += val;
     acabSel.push({ nome, val });
   });
@@ -598,19 +612,36 @@ export const configDefault: AppConfig = {
     { nome: 'GTO 52 (4 cores)',formato: '36x52cm', custoHora: 140, velocidade: 5000, pinca: 1.2 },
   ],
   acabamentos: [
-    { nome: 'Laminação Fosca',      formula: 'laminacao',   valorM2: 1.80 },
-    { nome: 'Laminação Brilho',     formula: 'laminacao',   valorM2: 1.80 },
-    { nome: 'Verniz UV Total',      formula: 'verniz_total', valorM2: 2.90 },
-    { nome: 'Verniz UV Localizado', formula: 'verniz_local', valorM2: 4.60, percArea: 30 },
-    { nome: 'Corte e Vinco',        formula: 'corte_vinco',  setup: 80, valorMil: 100 },
-    { nome: 'Dobra Simples',        formula: 'por_mil',     valorMil: 40 },
-    { nome: 'Dobra Cruzada',        formula: 'por_mil',     valorMil: 40 },
-    { nome: 'Grampeamento',         formula: 'por_mil',     valorMil: 90 },
-    { nome: 'Picote',               formula: 'por_mil',     valorMil: 80 },
-    { nome: 'Numeração',            formula: 'por_mil',     valorMil: 60 },
-    { nome: 'Blocagem',             formula: 'por_mil',     valorMil: 50 },
-    { nome: 'Relevo Seco',          formula: 'fixo',         valor: 350 },
+    { nome: 'Laminação Fosca',      formula: 'laminacao',   valorM2: 1.80, valorMinimo: 0 },
+    { nome: 'Laminação Brilho',     formula: 'laminacao',   valorM2: 1.80, valorMinimo: 0 },
+    { nome: 'Verniz UV Total',      formula: 'verniz_total', valorM2: 2.90, valorMinimo: 0 },
+    { nome: 'Verniz UV Localizado', formula: 'verniz_local', valorM2: 4.60, percArea: 30, valorMinimo: 0 },
+    { nome: 'Corte e Vinco',        formula: 'corte_vinco',  setup: 80, valorMil: 100, valorMinimo: 0 },
+    { nome: 'Dobra Simples',        formula: 'por_mil',     valorMil: 40,  valorMinimo: 0 },
+    { nome: 'Dobra Cruzada',        formula: 'por_mil',     valorMil: 40,  valorMinimo: 0 },
+    { nome: 'Grampeamento',         formula: 'por_mil',     valorMil: 90,  valorMinimo: 0 },
+    { nome: 'Picote',               formula: 'por_mil',     valorMil: 80,  valorMinimo: 0 },
+    { nome: 'Numeração',            formula: 'por_mil',     valorMil: 60,  valorMinimo: 0 },
+    { nome: 'Blocagem',             formula: 'por_mil',     valorMil: 50,  valorMinimo: 0 },
+    { nome: 'Relevo Seco',          formula: 'fixo',         valor: 350,   valorMinimo: 0 },
   ],
+  formatos: [
+    { nome: 'Inteiro',    w: 66,   h: 96,   div: '1',    obs: 'folha inteira' },
+    { nome: 'Formato 2',  w: 66,   h: 48,   div: '1/2',  obs: 'corte ao meio na altura' },
+    { nome: 'Formato 2B', w: 33,   h: 96,   div: '1/2',  obs: 'corte ao meio na largura' },
+    { nome: 'Formato 3',  w: 66,   h: 32,   div: '1/3',  obs: 'corte ao terço na altura' },
+    { nome: 'Formato 3B', w: 22,   h: 96,   div: '1/3',  obs: 'corte ao terço na largura' },
+    { nome: 'Formato 4',  w: 33,   h: 48,   div: '1/4',  obs: 'meio × meio' },
+    { nome: 'Formato 6',  w: 33,   h: 32,   div: '1/6',  obs: 'meio × terço' },
+    { nome: 'Formato 6B', w: 22,   h: 48,   div: '1/6',  obs: 'terço × meio' },
+    { nome: 'Formato 8',  w: 33,   h: 24,   div: '1/8',  obs: 'meio × quarto' },
+    { nome: 'Formato 9',  w: 32,   h: 22,   div: '1/9',  obs: 'terço × terço' },
+    { nome: 'Formato 12', w: 22,   h: 24,   div: '1/12', obs: 'terço × quarto' },
+    { nome: 'Formato 16', w: 24,   h: 16.5, div: '1/16', obs: 'quarto × quarto' },
+    { nome: 'Formato 18', w: 22,   h: 16,   div: '1/18', obs: 'terço × sexto' },
+    { nome: 'Formato 32', w: 16.5, h: 12,   div: '1/32', obs: 'quarto × oitavo' },
+  ],
+  imposto: 10,
   ciAluguel: 4500, ciEnergia: 2800, ciManutencao: 1200, ciOutros: 800, ciHoras: 176, ciPorHora: 52.84,
 };
 
