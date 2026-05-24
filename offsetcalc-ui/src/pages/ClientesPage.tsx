@@ -35,6 +35,35 @@ function maskDoc(v: string, tipo: 'pf' | 'pj'): string {
     .replace(/(\d{4})(\d{1,2})$/, '$1-$2');
 }
 
+async function buscarCnpj(cnpj: string): Promise<Partial<Draft> | null> {
+  const v = cnpj.replace(/\D/g, '');
+  if (v.length !== 14) return null;
+  try {
+    const r = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${v}`);
+    if (!r.ok) return null;
+    const d = await r.json();
+    const nome = (d.nome_fantasia?.trim())
+      ? `${d.razao_social} (${d.nome_fantasia.trim()})`
+      : d.razao_social || '';
+    const cepFmt = (d.cep || '').replace(/\D/g, '').replace(/^(\d{5})(\d{3})$/, '$1-$2');
+    const telRaw = (d.telefone || '').split('/')[0].trim().replace(/\D/g, '').slice(0, 11);
+    const tel = telRaw.length > 10
+      ? telRaw.replace(/^(\d{2})(\d{5})(\d{4})$/, '($1) $2-$3')
+      : telRaw.replace(/^(\d{2})(\d{4})(\d{4})$/, '($1) $2-$3');
+    return {
+      nome,
+      cep: cepFmt,
+      rua: d.logradouro || '',
+      num: d.numero || '',
+      bairro: d.bairro || '',
+      cidade: d.municipio || '',
+      uf: d.uf || '',
+      ...(tel ? { tel } : {}),
+      ...(d.email ? { email: (d.email as string).toLowerCase() } : {}),
+    };
+  } catch { return null; }
+}
+
 async function buscarCep(cep: string): Promise<Partial<Cliente> | null> {
   const n = cep.replace(/\D/g, '');
   if (n.length !== 8) return null;
@@ -60,6 +89,7 @@ export default function ClientesPage({ onGoTo }: Props) {
   const [showForm, setShowForm] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [cepLoading, setCepLoading] = useState(false);
+  const [cnpjLoading, setCnpjLoading] = useState(false);
 
   const set = (patch: Partial<Draft>) => setDraft(d => ({ ...d, ...patch }));
 
@@ -129,6 +159,19 @@ export default function ClientesPage({ onGoTo }: Props) {
     onGoTo('orcamento');
   };
 
+  const handleDocChange = async (v: string) => {
+    const masked = maskDoc(v, draft.tipo || 'pf');
+    set({ doc: masked });
+    if (draft.tipo === 'pj' && masked.replace(/\D/g, '').length === 14) {
+      setCnpjLoading(true);
+      toast('🔍 Buscando CNPJ...');
+      const dados = await buscarCnpj(masked);
+      if (dados) { set(dados); toast('✅ Dados preenchidos automaticamente!'); }
+      else toast('CNPJ não encontrado');
+      setCnpjLoading(false);
+    }
+  };
+
   const handleCepBlur = async () => {
     if (!draft.cep || draft.cep.replace(/\D/g, '').length !== 8) return;
     setCepLoading(true);
@@ -186,8 +229,9 @@ export default function ClientesPage({ onGoTo }: Props) {
             <div className="field">
               <label>{draft.tipo === 'pj' ? 'CNPJ' : 'CPF'}</label>
               <input type="text" value={draft.doc || ''}
-                onChange={e => set({ doc: maskDoc(e.target.value, draft.tipo || 'pf') })}
-                placeholder={draft.tipo === 'pj' ? '00.000.000/0001-00' : '000.000.000-00'} />
+                onChange={e => handleDocChange(e.target.value)}
+                placeholder={draft.tipo === 'pj' ? '00.000.000/0001-00' : '000.000.000-00'}
+                style={cnpjLoading ? { borderColor: 'var(--accent2)' } : undefined} />
             </div>
           </div>
 
