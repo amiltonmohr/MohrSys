@@ -1,39 +1,28 @@
 import { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-  PieChart, Pie, Cell, AreaChart, Area,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  ResponsiveContainer, PieChart, Pie, Cell,
 } from 'recharts';
-
-const COLORS = ['#7c3aed', '#ec4899', '#f59e0b', '#ef4444', '#a78bfa'];
-
-const STATUS_LABELS: Record<string, string> = {
-  rascunho: 'Rascunho', enviado: 'Enviado', aceito: 'Aceito', recusado: 'Recusado',
-};
-const STATUS_COLORS: Record<string, string> = {
-  rascunho: '#6b7280', enviado: '#f59e0b', aceito: '#10b981', recusado: '#ef4444',
-};
 
 type Periodo = 'todos' | '30' | '90' | '365';
 
-function getStatus(h: Record<string, unknown>): string {
-  return (h.status as string) || (h.aprovado ? 'aceito' : 'rascunho');
-}
+const PALETTE = ['#7c3aed','#06b6d4','#e11d48','#f59e0b','#10b981','#3b82f6','#ec4899','#f97316'];
+const GREEN = '#10b981';
+const ACCENT = '#7c3aed';
+const TEAL = '#06b6d4';
 
 function getTotal(h: Record<string, unknown>): number {
   return typeof h.total === 'number' ? h.total : ((h.resultado as Record<string, unknown>)?.total as number) || 0;
 }
-
 function getMargem(h: Record<string, unknown>): number {
   if (typeof h.margem === 'number') return h.margem;
   return ((h.resultado as Record<string, unknown>)?.margem as number) || 0;
 }
-
 function getSubtotal(h: Record<string, unknown>): number {
   if (typeof h.subtotal === 'number') return h.subtotal;
   return ((h.resultado as Record<string, unknown>)?.subtotal as number) || 0;
 }
-
 function getCusto(h: Record<string, unknown>, key: string): number {
   const res = h.resultado as Record<string, unknown> | undefined;
   const direct = h[key];
@@ -41,13 +30,15 @@ function getCusto(h: Record<string, unknown>, key: string): number {
   return (res?.[key] as number) || 0;
 }
 
-const fmtBRL = (v: number) =>
-  `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+const brl = (v: number) => `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-const tooltipFmt = (v: number) => fmtBRL(v);
+const tooltipStyle = {
+  background: 'var(--surface)', border: '1px solid var(--border)',
+  borderRadius: '8px', fontSize: '12px', fontFamily: 'var(--mono)',
+};
 
 export default function DashboardPage() {
-  const { historico, clientes } = useApp();
+  const { historico } = useApp();
   const [periodo, setPeriodo] = useState<Periodo>('todos');
 
   const dados = useMemo(() => {
@@ -56,229 +47,257 @@ export default function DashboardPage() {
     return (historico as Record<string, unknown>[]).filter(h => (h.ts as number) >= limite);
   }, [historico, periodo]);
 
-  // ── KPIs ──────────────────────────────────────────────────────────────────
-  const kpis = useMemo(() => {
-    const total = dados.length;
-    const aceitos = dados.filter(h => getStatus(h) === 'aceito');
-    const fatTotal = dados.reduce((s, h) => s + getTotal(h), 0);
-    const fatAprov = aceitos.reduce((s, h) => s + getTotal(h), 0);
-    const totalMarg = dados.reduce((s, h) => s + getMargem(h), 0);
-    const totalSub = dados.reduce((s, h) => s + getSubtotal(h), 0);
-    const taxa = total > 0 ? (aceitos.length / total) * 100 : 0;
-    const ticketMedio = aceitos.length > 0 ? fatAprov / aceitos.length : 0;
-    const pctMargem = totalSub > 0 ? (totalMarg / totalSub) * 100 : 0;
-    return { total, aceitos: aceitos.length, pendentes: total - aceitos.length, fatTotal, fatAprov, taxa, ticketMedio, pctMargem };
+  // ── 6 KPIs ────────────────────────────────────────────────────────────────
+  const { fatTotal, fatAprov, pctAprov, pctMargem, nAprov, nPend } = useMemo(() => {
+    const aprov  = dados.filter(h => !!h.aprovado);
+    const pend   = dados.filter(h => !h.aprovado);
+    const fatT   = dados.reduce((s, h) => s + getTotal(h), 0);
+    const fatA   = aprov.reduce((s, h) => s + getTotal(h), 0);
+    const marg   = dados.reduce((s, h) => s + getMargem(h), 0);
+    const sub    = dados.reduce((s, h) => s + getSubtotal(h), 0);
+    const pctA   = dados.length > 0 ? (aprov.length / dados.length * 100) : 0;
+    const pctM   = sub > 0 ? (marg / sub * 100) : 0;
+    return { fatTotal: fatT, fatAprov: fatA, pctAprov: pctA, pctMargem: pctM, nAprov: aprov.length, nPend: pend.length };
   }, [dados]);
 
-  // ── Chart: Orçamentos + Receita por mês (últimos 6 meses) ────────────────
-  const dadosMeses = useMemo(() => {
-    const meses: Record<string, { mes: string; qtd: number; valor: number }> = {};
-    const now = new Date();
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      const label = d.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' });
-      meses[key] = { mes: label, qtd: 0, valor: 0 };
-    }
+  // ── Chart 1: Emitidos vs Aprovados por data ────────────────────────────────
+  const dadosDatas = useMemo(() => {
+    const byDate: Record<string, { data: string; emitidos: number; aprovados: number }> = {};
     dados.forEach(h => {
-      const d = new Date(h.ts as number);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      if (meses[key]) { meses[key].qtd++; meses[key].valor += getTotal(h); }
+      const d = (h.data as string) || 'sem data';
+      if (!byDate[d]) byDate[d] = { data: d, emitidos: 0, aprovados: 0 };
+      byDate[d].emitidos += getTotal(h);
+      if (h.aprovado) byDate[d].aprovados += getTotal(h);
     });
-    return Object.values(meses);
+    return Object.values(byDate)
+      .sort((a, b) => a.data.localeCompare(b.data))
+      .map(r => ({
+        ...r,
+        label: r.data !== 'sem data'
+          ? r.data.split('-').slice(1).reverse().join('/')
+          : 's/d',
+      }));
   }, [dados]);
 
-  // ── Chart: Distribuição por status ────────────────────────────────────────
-  const dadosStatus = useMemo(() => {
-    const counts: Record<string, number> = {};
-    dados.forEach(h => { const s = getStatus(h); counts[s] = (counts[s] || 0) + 1; });
-    return Object.entries(counts).map(([s, v]) => ({ name: STATUS_LABELS[s] || s, value: v, status: s }));
-  }, [dados]);
+  // ── Chart 2: Status doughnut ───────────────────────────────────────────────
+  const dadosDoughnut = useMemo(() => [
+    { name: `Aprovados (${nAprov})`, value: nAprov, color: GREEN },
+    { name: `Pendentes (${nPend})`, value: nPend, color: '#d1d5db' },
+  ], [nAprov, nPend]);
 
-  // ── Chart: Top 5 clientes por valor ──────────────────────────────────────
+  const dadosDoughnutValor = useMemo(() => [
+    { name: 'Aprovado', value: fatAprov, color: GREEN },
+    { name: 'Pendente', value: Math.max(0, fatTotal - fatAprov), color: '#d1d5db' },
+  ], [fatAprov, fatTotal]);
+
+  // ── Chart 3: Top 8 clientes ────────────────────────────────────────────────
   const dadosClientes = useMemo(() => {
-    const byCliente: Record<string, number> = {};
-    dados.forEach(h => {
-      const nome = (h.cliente as string) || '(sem cliente)';
-      byCliente[nome] = (byCliente[nome] || 0) + getTotal(h);
-    });
-    return Object.entries(byCliente)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-      .map(([nome, valor]) => ({ nome: nome.length > 16 ? nome.slice(0, 16) + '…' : nome, valor }));
+    const byC: Record<string, number> = {};
+    dados.forEach(h => { const c = (h.cliente as string) || 'Não informado'; byC[c] = (byC[c] || 0) + getTotal(h); });
+    return Object.entries(byC).sort((a, b) => b[1] - a[1]).slice(0, 8)
+      .map(([nome, valor], i) => ({ nome, valor, fill: PALETTE[i % PALETTE.length] }));
   }, [dados]);
 
-  // ── Chart: Composição de Custos (horizontal stacked) ─────────────────────
+  // ── Chart 4: Composição acumulada de custos ───────────────────────────────
+  const CUSTO_KEYS  = ['custoPapel','custoChapas','custoTinta','custoMaquina','custoIndireto','custoAcab'];
+  const CUSTO_NOMES = ['Papel','Chapas','Tinta','Máquina','Indiretos','Acabamentos'];
+  const CUSTO_COLORS = [ACCENT, TEAL, '#e11d48', '#f59e0b', GREEN, '#3b82f6', '#8b5cf6'];
+
   const dadosCustos = useMemo(() => {
     if (!dados.length) return [];
-    return [{
-      name: 'Composição',
-      Papel:       dados.reduce((s, h) => s + getCusto(h, 'custoPapel'), 0),
-      Chapas:      dados.reduce((s, h) => s + getCusto(h, 'custoChapas'), 0),
-      Tinta:       dados.reduce((s, h) => s + getCusto(h, 'custoTinta'), 0),
-      Máquina:     dados.reduce((s, h) => s + getCusto(h, 'custoMaquina'), 0),
-      Indiretos:   dados.reduce((s, h) => s + getCusto(h, 'custoIndireto'), 0),
-      Acabamentos: dados.reduce((s, h) => s + getCusto(h, 'custoAcab'), 0),
-      Margem:      dados.reduce((s, h) => s + getMargem(h), 0),
-    }];
+    const row: Record<string, number | string> = { name: 'Composição Média' };
+    CUSTO_KEYS.forEach(k => { row[k] = dados.reduce((s, h) => s + getCusto(h, k), 0); });
+    row['margem'] = dados.reduce((s, h) => s + getMargem(h), 0);
+    return [row];
   }, [dados]);
 
-  const custoColors: Record<string, string> = {
-    Papel: '#7c3aed', Chapas: '#06b6d4', Tinta: '#e11d48',
-    Máquina: '#f59e0b', Indiretos: '#10b981', Acabamentos: '#3b82f6', Margem: '#8b5cf6',
-  };
-
-  const tooltipStyle = {
-    background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '12px',
-  };
-
-  const clientesRecentes = useMemo(
-    () => clientes.filter(c => Date.now() - c.ts < 30 * 24 * 3600 * 1000).length,
-    [clientes]
-  );
+  if (dados.length === 0) {
+    return (
+      <div className="section active">
+        <div className="section-header">
+          <h2><span>Dashboard</span></h2>
+          <PeriodoSelect value={periodo} onChange={setPeriodo} />
+        </div>
+        <div className="result-grid" style={{ marginBottom: '16px' }}>
+          {kpiItems(0, 0, 0, 0, 0, 0).map(k => <KpiCard key={k.label} {...k} />)}
+        </div>
+        <div style={{ color: 'var(--text3)', fontFamily: 'var(--mono)', fontSize: '12px', textAlign: 'center', padding: '60px 0' }}>
+          {periodo !== 'todos' ? 'Nenhum orçamento no período selecionado.' : 'Sem dados ainda. Salve orçamentos para ver os gráficos.'}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="section active">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
-        <h2 style={{ fontSize: '22px', fontWeight: 800 }}>
-          Dashboard <span className="grad-text">Gráfica</span>
-        </h2>
-        <select
-          value={periodo}
-          onChange={e => setPeriodo(e.target.value as Periodo)}
-          style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: '6px', padding: '7px 12px', color: 'var(--text)', fontFamily: 'var(--mono)', fontSize: '12px', outline: 'none', cursor: 'pointer' }}>
-          <option value="todos">Todos os períodos</option>
-          <option value="30">Últimos 30 dias</option>
-          <option value="90">Últimos 90 dias</option>
-          <option value="365">Último ano</option>
-        </select>
+      <div className="section-header">
+        <h2><span>Dashboard</span></h2>
+        <PeriodoSelect value={periodo} onChange={setPeriodo} />
       </div>
 
-      {/* KPIs */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '12px', marginBottom: '24px' }}>
-        {([
-          { label: 'Faturamento Total',   value: fmtBRL(kpis.fatTotal),            color: 'var(--accent)' },
-          { label: 'Faturamento Aprovado',value: fmtBRL(kpis.fatAprov),            color: '#10b981' },
-          { label: 'Taxa de Conversão',   value: `${kpis.taxa.toFixed(1)}%`,       color: '#a78bfa' },
-          { label: 'Orçamentos Emitidos', value: kpis.total,                        color: '#f59e0b' },
-          { label: 'Aprovados / Pendentes', value: `${kpis.aceitos} / ${kpis.pendentes}`, color: '#06b6d4' },
-          { label: 'Margem Média',        value: `${kpis.pctMargem.toFixed(1)}%`,  color: '#ec4899' },
-          { label: 'Ticket Médio',        value: fmtBRL(kpis.ticketMedio),         color: '#7c3aed' },
-          { label: 'Total de Clientes',   value: clientes.length,                  color: 'var(--accent2)' },
-          { label: 'Clientes (30 dias)',  value: clientesRecentes,                 color: '#10b981' },
-        ] as { label: string; value: string | number; color: string }[]).map(k => (
-          <div key={k.label} className="card" style={{ padding: '16px', margin: 0 }}>
-            <div style={{ fontSize: '10px', color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>{k.label}</div>
-            <div style={{ fontSize: '20px', fontWeight: 800, color: k.color, fontFamily: 'var(--mono)' }}>{k.value}</div>
-          </div>
+      {/* 6 KPIs */}
+      <div className="result-grid" style={{ marginBottom: '16px' }}>
+        {kpiItems(fatTotal, fatAprov, pctAprov, dados.length, nAprov, nPend, pctMargem).map(k => (
+          <KpiCard key={k.label} {...k} />
         ))}
       </div>
 
-      {dados.length === 0 ? (
-        <div className="card" style={{ padding: '48px', textAlign: 'center', color: 'var(--text2)', fontSize: '14px' }}>
-          {periodo !== 'todos' ? 'Nenhum orçamento no período selecionado.' : 'Sem dados ainda. Salve orçamentos para ver os gráficos.'}
-        </div>
-      ) : (
-        <>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%,380px), 1fr))', gap: '16px' }}>
+      {/* Chart 1 — full width: Emitidos vs Aprovados por data */}
+      <div className="card" style={{ marginBottom: '16px' }}>
+        <div className="card-title">Orçamentos Emitidos vs Aprovados por Data</div>
+        <ResponsiveContainer width="100%" height={180}>
+          <BarChart data={dadosDatas} margin={{ top: 4, right: 12, left: 0, bottom: 4 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(216,210,232,.3)" />
+            <XAxis dataKey="label" tick={{ fontSize: 11, fill: 'var(--text2)' }} />
+            <YAxis tick={{ fontSize: 11, fill: 'var(--text2)' }} tickFormatter={v => `R$${(v/1000).toFixed(0)}k`} />
+            <Tooltip
+              contentStyle={tooltipStyle}
+              formatter={(v: number) => brl(v)}
+            />
+            <Legend wrapperStyle={{ fontSize: '11px' }} />
+            <Bar dataKey="emitidos" name="Emitidos"  fill={ACCENT + '99'} stroke={ACCENT} strokeWidth={1} radius={[3,3,0,0]} />
+            <Bar dataKey="aprovados" name="Aprovados" fill={GREEN  + 'aa'} stroke={GREEN}  strokeWidth={1} radius={[3,3,0,0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
 
-            {/* Chart 1: Orçamentos por mês */}
-            <div className="card" style={{ padding: '20px', margin: 0 }}>
-              <div className="card-title">Orçamentos por Mês</div>
-              <ResponsiveContainer width="100%" height={230}>
-                <BarChart data={dadosMeses} margin={{ top: 4, right: 8, left: -10, bottom: 4 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                  <XAxis dataKey="mes" tick={{ fontSize: 11, fill: 'var(--text2)' }} />
-                  <YAxis tick={{ fontSize: 11, fill: 'var(--text2)' }} allowDecimals={false} />
-                  <Tooltip contentStyle={tooltipStyle} />
-                  <Bar dataKey="qtd" name="Orçamentos" fill="#7c3aed" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-
-            {/* Chart 2: Distribuição por status */}
-            <div className="card" style={{ padding: '20px', margin: 0 }}>
-              <div className="card-title">Status dos Orçamentos</div>
-              {dadosStatus.length === 0 ? (
-                <div style={{ height: 230, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text2)', fontSize: '13px' }}>Sem dados de status</div>
-              ) : (
-                <ResponsiveContainer width="100%" height={230}>
-                  <PieChart>
-                    <Pie data={dadosStatus} cx="50%" cy="45%" outerRadius={80} dataKey="value" nameKey="name"
-                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
-                      {dadosStatus.map((d, i) => (
-                        <Cell key={d.status} fill={STATUS_COLORS[d.status] || COLORS[i % COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip contentStyle={tooltipStyle} />
-                    <Legend formatter={v => <span style={{ fontSize: '11px', color: 'var(--text)' }}>{v}</span>} />
-                  </PieChart>
-                </ResponsiveContainer>
-              )}
-            </div>
-
-            {/* Chart 3: Top clientes por valor */}
-            <div className="card" style={{ padding: '20px', margin: 0 }}>
-              <div className="card-title">Top 5 Clientes (por Valor)</div>
-              {dadosClientes.length === 0 ? (
-                <div style={{ height: 230, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text2)', fontSize: '13px' }}>Sem dados</div>
-              ) : (
-                <ResponsiveContainer width="100%" height={230}>
-                  <BarChart data={dadosClientes} layout="vertical" margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                    <XAxis type="number" tick={{ fontSize: 11, fill: 'var(--text2)' }} tickFormatter={v => `${(v / 1000).toFixed(0)}k`} />
-                    <YAxis type="category" dataKey="nome" tick={{ fontSize: 10, fill: 'var(--text2)' }} width={90} />
-                    <Tooltip formatter={tooltipFmt} contentStyle={tooltipStyle} />
-                    <Bar dataKey="valor" name="Valor" fill="#10b981" radius={[0, 4, 4, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
-            </div>
-
-            {/* Chart 4: Receita mensal (área) */}
-            <div className="card" style={{ padding: '20px', margin: 0 }}>
-              <div className="card-title">Receita Mensal (R$)</div>
-              <ResponsiveContainer width="100%" height={230}>
-                <AreaChart data={dadosMeses} margin={{ top: 4, right: 8, left: -10, bottom: 4 }}>
-                  <defs>
-                    <linearGradient id="receitaGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#7c3aed" stopOpacity={0.35} />
-                      <stop offset="95%" stopColor="#7c3aed" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                  <XAxis dataKey="mes" tick={{ fontSize: 11, fill: 'var(--text2)' }} />
-                  <YAxis tick={{ fontSize: 11, fill: 'var(--text2)' }} tickFormatter={v => `${(v / 1000).toFixed(0)}k`} />
-                  <Tooltip formatter={tooltipFmt} contentStyle={tooltipStyle} />
-                  <Area type="monotone" dataKey="valor" name="Receita" stroke="#7c3aed" fill="url(#receitaGrad)" strokeWidth={2} />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
+      {/* Charts 2+3 — 2-col */}
+      <div className="grid-2" style={{ marginBottom: '16px' }}>
+        {/* Doughnut: Status */}
+        <div className="card">
+          <div className="card-title">Status dos Orçamentos</div>
+          <div style={{ fontSize: '10px', color: 'var(--text3)', textAlign: 'center', marginBottom: '4px' }}>
+            Anel ext. = valor · Anel int. = qtde
           </div>
+          <ResponsiveContainer width="100%" height={220}>
+            <PieChart>
+              <Pie data={dadosDoughnutValor} cx="50%" cy="45%" innerRadius={55} outerRadius={80}
+                dataKey="value" nameKey="name">
+                {dadosDoughnutValor.map((d, i) => <Cell key={i} fill={d.color + 'bb'} stroke={d.color} strokeWidth={2} />)}
+              </Pie>
+              <Pie data={dadosDoughnut} cx="50%" cy="45%" innerRadius={30} outerRadius={50}
+                dataKey="value" nameKey="name">
+                {dadosDoughnut.map((d, i) => <Cell key={i} fill={d.color + '66'} stroke={d.color} strokeWidth={1} />)}
+              </Pie>
+              <Tooltip contentStyle={tooltipStyle} formatter={(v: number, name: string) =>
+                name.includes('Aprovado') || name.includes('Pendente') ? brl(v) : `${v} orç.`} />
+              <Legend wrapperStyle={{ fontSize: '11px' }} />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
 
-          {/* Chart 5: Composição de Custos (stacked horizontal) */}
-          {dadosCustos.length > 0 && (
-            <div className="card" style={{ marginTop: '16px' }}>
-              <div className="card-title">Composição de Custos (total do período)</div>
-              <ResponsiveContainer width="100%" height={100}>
-                <BarChart data={dadosCustos} layout="vertical" margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                  <XAxis type="number" tick={{ fontSize: 10, fill: 'var(--text2)' }} tickFormatter={v => `${(v / 1000).toFixed(0)}k`} />
-                  <YAxis type="category" dataKey="name" tick={{ fontSize: 10, fill: 'var(--text2)' }} width={80} />
-                  <Tooltip
-                    formatter={(v: number, name: string) => [fmtBRL(v), name]}
-                    contentStyle={tooltipStyle}
-                  />
-                  <Legend formatter={v => <span style={{ fontSize: '10px', color: 'var(--text)' }}>{v}</span>} />
-                  {Object.entries(custoColors).map(([name, color]) => (
-                    <Bar key={name} dataKey={name} stackId="a" fill={color + 'bb'} stroke={color} strokeWidth={0} />
-                  ))}
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          )}
-        </>
+        {/* Top Clientes: horizontal bar */}
+        <div className="card">
+          <div className="card-title">Top Clientes por Faturamento</div>
+          <ResponsiveContainer width="100%" height={220}>
+            <BarChart data={dadosClientes} layout="vertical" margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(216,210,232,.3)" />
+              <XAxis type="number" tick={{ fontSize: 10, fill: 'var(--text2)' }} tickFormatter={v => `R$${(v/1000).toFixed(0)}k`} />
+              <YAxis type="category" dataKey="nome" tick={{ fontSize: 10, fill: 'var(--text2)' }} width={90} />
+              <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => brl(v)} />
+              <Bar dataKey="valor" name="Faturamento" radius={[0,4,4,0]}>
+                {dadosClientes.map((d, i) => <Cell key={i} fill={d.fill + 'aa'} stroke={d.fill} strokeWidth={1} />)}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* Chart 4 — full width: Composição de custos (horizontal stacked) */}
+      {dadosCustos.length > 0 && (
+        <div className="card">
+          <div className="card-title">Composição Acumulada de Custos</div>
+          <ResponsiveContainer width="100%" height={100}>
+            <BarChart data={dadosCustos} layout="vertical" margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(216,210,232,.3)" />
+              <XAxis type="number" tick={{ fontSize: 10, fill: 'var(--text2)' }} tickFormatter={v => `R$${(v/1000).toFixed(0)}k`} />
+              <YAxis type="category" dataKey="name" hide />
+              <Tooltip contentStyle={tooltipStyle}
+                formatter={(v: number, name: string) => [`${brl(v)} (${fatTotal > 0 ? ((v/fatTotal)*100).toFixed(1) : 0}%)`, name]} />
+              <Legend wrapperStyle={{ fontSize: '11px' }} />
+              {[...CUSTO_KEYS, 'margem'].map((k, i) => (
+                <Bar key={k} dataKey={k} name={[...CUSTO_NOMES,'Margem'][i]} stackId="a"
+                  fill={CUSTO_COLORS[i] + '99'} stroke={CUSTO_COLORS[i]} strokeWidth={1} radius={i === CUSTO_KEYS.length ? [0,2,2,0] : 0} />
+              ))}
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
       )}
     </div>
+  );
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function kpiItems(fatTotal: number, fatAprov: number, pctAprov: number, emitidos: number, nAprov: number, nPend: number, pctMargem = 0) {
+  return [
+    {
+      label: 'Faturamento Total',
+      value: brl(fatTotal),
+      className: 'result-item-value highlight',
+    },
+    {
+      label: 'Fat. Aprovado',
+      value: brl(fatAprov),
+      style: { color: GREEN, fontSize: '18px', fontWeight: 700 },
+    },
+    {
+      label: '% Aprovação',
+      value: `${pctAprov.toFixed(0)}%`,
+      style: { color: pctAprov >= 50 ? GREEN : '#e11d48' },
+    },
+    {
+      label: 'Orçamentos Emitidos',
+      value: String(emitidos),
+    },
+    {
+      label: 'Aprovados / Pendentes',
+      value: null,
+      customValue: (
+        <span style={{ fontSize: '16px', fontFamily: 'var(--mono)', fontWeight: 500 }}>
+          <span style={{ color: GREEN }}>{nAprov}</span>
+          {' / '}
+          <span style={{ color: 'var(--text2)' }}>{nPend}</span>
+        </span>
+      ),
+    },
+    {
+      label: 'Margem Média',
+      value: `${pctMargem.toFixed(1)}%`,
+      className: 'result-item-value green',
+    },
+  ];
+}
+
+interface KpiProps {
+  label: string;
+  value?: string | null;
+  className?: string;
+  style?: React.CSSProperties;
+  customValue?: React.ReactNode;
+}
+function KpiCard({ label, value, className, style, customValue }: KpiProps) {
+  return (
+    <div className="result-item">
+      <div className="result-item-label">{label}</div>
+      {customValue ? customValue : (
+        <div className={className || 'result-item-value'} style={style}>{value}</div>
+      )}
+    </div>
+  );
+}
+
+function PeriodoSelect({ value, onChange }: { value: Periodo; onChange: (v: Periodo) => void }) {
+  return (
+    <select value={value} onChange={e => onChange(e.target.value as Periodo)}
+      style={{
+        background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: '6px',
+        padding: '7px 12px', color: 'var(--text)', fontFamily: 'var(--mono)', fontSize: '12px', outline: 'none', cursor: 'pointer',
+      }}>
+      <option value="todos">Todos os períodos</option>
+      <option value="30">Últimos 30 dias</option>
+      <option value="90">Últimos 90 dias</option>
+      <option value="365">Último ano</option>
+    </select>
   );
 }
